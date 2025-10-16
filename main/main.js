@@ -3,33 +3,28 @@ const path = require("path");
 const { watchClipboard } = require("./sensors/clipboard");
 const { getActiveWindowTitle } = require("./sensors/activeWin");
 const http = require("http");
+const { summarizeWithDeepSeek } = require("../shared/summarizer");
 
 let overlay;
 let isVisible = true;
 const TOGGLE_HOTKEY = "Control+Shift+Space";
 
-// Detect available Vite port
+// Utility: detect running Vite dev server port
 async function detectVitePort() {
   const ports = [5173, 5174, 5175];
   for (const p of ports) {
-    try {
-      const res = await new Promise((resolve) => {
-        const req = http
-          .get(`http://localhost:${p}`, () => resolve(true))
-          .on("error", () => resolve(false));
-        req.end();
-      });
-      if (res) return p;
-    } catch {
-      continue;
-    }
+    const ok = await new Promise((res) => {
+      const req = http.get(`http://localhost:${p}`, () => res(true)).on("error", () => res(false));
+      req.end();
+    });
+    if (ok) return p;
   }
   return null;
 }
 
 async function createOverlay() {
   overlay = new BrowserWindow({
-    width: 700,
+    width: 720,
     height: 140,
     x: 600,
     y: 100,
@@ -39,9 +34,8 @@ async function createOverlay() {
     alwaysOnTop: true,
     skipTaskbar: true,
     opacity: 0.96,
-    roundedCorners: true,
-    // ✅ must be resizable for dynamic size updates
     resizable: true,
+    roundedCorners: true,
     vibrancy: "under-window",
     visualEffectState: "active",
     webPreferences: {
@@ -54,71 +48,86 @@ async function createOverlay() {
 
   if (port) {
     console.log(`✅ Connected to Vite dev server on port ${port}`);
-    overlay.loadURL(`http://localhost:${port}`);
+    await overlay.loadURL(`http://localhost:${port}`);
   } else {
     console.log("⚙️ No Vite server found. Loading production build...");
-    overlay.loadFile(path.join(__dirname, "../renderer/dist/index.html"));
+    await overlay.loadFile(path.join(__dirname, "../renderer/dist/index.html"));
   }
+
+  overlay.webContents.on("did-finish-load", () => {
+    console.log("🖥 Renderer loaded, ready for events.");
+  });
 }
 
+// Electron startup
 app.whenReady().then(async () => {
   await createOverlay();
 
-  // 🧠 Toggle visibility
+  // 🔹 Toggle visibility (Ctrl + Shift + Space)
   globalShortcut.register(TOGGLE_HOTKEY, () => {
     if (!overlay) return;
     isVisible = !isVisible;
     isVisible ? overlay.show() : overlay.hide();
   });
 
-  // 🧭 Move overlay
+  // 🔹 Move overlay
   const moveStep = 50;
-  const moveWindow = (dx, dy) => {
+  const move = (dx, dy) => {
     if (!overlay) return;
-    const [curX, curY] = overlay.getPosition();
-    overlay.setPosition(curX + dx, curY + dy);
+    const [x, y] = overlay.getPosition();
+    overlay.setPosition(x + dx, y + dy);
   };
+  globalShortcut.register("CommandOrControl+Up", () => move(0, -moveStep));
+  globalShortcut.register("CommandOrControl+Down", () => move(0, moveStep));
+  globalShortcut.register("CommandOrControl+Left", () => move(-moveStep, 0));
+  globalShortcut.register("CommandOrControl+Right", () => move(moveStep, 0));
 
-  globalShortcut.register("CommandOrControl+Up", () => moveWindow(0, -moveStep));
-  globalShortcut.register("CommandOrControl+Down", () => moveWindow(0, moveStep));
-  globalShortcut.register("CommandOrControl+Left", () => moveWindow(-moveStep, 0));
-  globalShortcut.register("CommandOrControl+Right", () => moveWindow(moveStep, 0));
-
-  // ❌ Quit shortcut (Ctrl + Shift + Q)
+  // 🔹 Quit (Ctrl + Shift + Q)
   globalShortcut.register("Control+Shift+Q", () => {
     console.log("👋 Quit shortcut pressed — closing app...");
     app.quit();
   });
 
-  // 📋 Clipboard listener
-  watchClipboard((text) => {
-    overlay?.webContents?.send("clipboard-event", text);
+  // 📋 Clipboard watcher → summarize
+  watchClipboard(async (text) => {
+    try {
+      console.log("📋 Clipboard text:", text.slice(0, 80));
+      const summary = await summarizeWithDeepSeek(text, overlay);
+      if (overlay && overlay.webContents && !overlay.webContents.isDestroyed()) {
+        overlay.webContents.send("summary-event", { text, summary });
+      }
+    } catch (err) {
+      console.error("Summarization error:", err);
+    }
   });
 
   // 🪟 Active window tracker
   setInterval(async () => {
     try {
       const win = await getActiveWindowTitle();
-      overlay?.webContents?.send("active-window", win);
+      if (overlay && overlay.webContents && !overlay.webContents.isDestroyed()) {
+        overlay.webContents.send("active-window", win);
+      }
     } catch (e) {
       console.error(e);
     }
   }, 2000);
 });
 
-// 🧩 IPC Handlers
+// 🧩 IPC: Resize + Toggle
+let resizeTimeout;
 ipcMain.handle("overlay:set-size", (_evt, { width, height }) => {
-  if (!overlay) return false;
-
-  const minH = 120;
-  const maxH = 800;
-  const clampedH = Math.max(minH, Math.min(Math.round(height), maxH));
-  const clampedW = Math.max(400, Math.min(Math.round(width), 1000));
-
-  // ✅ This line actually resizes the window
-  overlay.setSize(clampedW, clampedH);
-  return true;
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    if (!overlay) return;
+    const minH = 120;
+    const maxH = 800;
+    const clampedH = Math.max(minH, Math.min(Math.round(height), maxH));
+    const clampedW = Math.max(400, Math.min(Math.round(width), 1000));
+    overlay.setSize(clampedW, clampedH);
+  }, 300);
 });
+
 
 ipcMain.handle("overlay:toggle", () => {
   if (!overlay) return false;
