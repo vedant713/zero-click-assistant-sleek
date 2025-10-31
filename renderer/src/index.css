@@ -5,7 +5,8 @@
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* Transparent root to avoid black rectangle on transparent window */
+  background-color: transparent !important;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -24,10 +25,11 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
+  /* Transparent body so the Electron window stays see-through */
+  background: transparent !important;
+  /* Keep layout simple to prevent full-window dark background */
+  display: block;
   min-width: 320px;
-  min-height: 100vh;
 }
 
 h1 {
@@ -57,7 +59,8 @@ button:focus-visible {
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
-    background-color: #ffffff;
+    /* Keep transparent even in light mode */
+    background-color: transparent !important;
   }
   a:hover {
     color: #747bff;

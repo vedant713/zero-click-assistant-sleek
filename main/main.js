@@ -3,7 +3,9 @@ const path = require("path");
 const { watchClipboard } = require("./sensors/clipboard");
 const { getActiveWindowTitle } = require("./sensors/activeWin");
 const http = require("http");
-const { summarizeWithDeepSeek } = require("../shared/summarizer");
+require("dotenv").config();
+const { summarizeWithGemini, qaWithGemini } = require("../shared/summarizer");
+
 
 let overlay;
 let isVisible = true;
@@ -24,7 +26,7 @@ async function detectVitePort() {
 
 async function createOverlay() {
   overlay = new BrowserWindow({
-    width: 720,
+    width: 820, // ✅ match your fixed width
     height: 140,
     x: 600,
     y: 100,
@@ -33,16 +35,18 @@ async function createOverlay() {
     hasShadow: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    opacity: 0.96,
-    resizable: true,
+    resizable: false, // ✅ prevent Electron from recalculating internal frame bounds
+    backgroundColor: "#00000000",
     roundedCorners: true,
     vibrancy: "under-window",
     visualEffectState: "active",
+    backgroundMaterial: "acrylic",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
     },
   });
+
 
   const port = await detectVitePort();
 
@@ -54,9 +58,11 @@ async function createOverlay() {
     await overlay.loadFile(path.join(__dirname, "../renderer/dist/index.html"));
   }
 
-  overlay.webContents.on("did-finish-load", () => {
-    console.log("🖥 Renderer loaded, ready for events.");
-  });
+overlay.webContents.on("did-finish-load", () => {
+  console.log("🖥 Renderer loaded, ready for events.");
+  overlay.setSize(820, 140); // ✅ ensure the width matches once DOM is ready
+});
+
 }
 
 // Electron startup
@@ -92,14 +98,15 @@ app.whenReady().then(async () => {
   watchClipboard(async (text) => {
     try {
       console.log("📋 Clipboard text:", text.slice(0, 80));
-      const summary = await summarizeWithDeepSeek(text, overlay);
+      const { summary, followUps } = await summarizeWithGemini(text);
       if (overlay && overlay.webContents && !overlay.webContents.isDestroyed()) {
-        overlay.webContents.send("summary-event", { text, summary });
+        overlay.webContents.send("summary-event", { text, summary, followUps });
       }
     } catch (err) {
       console.error("Summarization error:", err);
     }
   });
+
 
   // 🪟 Active window tracker
   setInterval(async () => {
@@ -116,17 +123,74 @@ app.whenReady().then(async () => {
 
 // 🧩 IPC: Resize + Toggle
 let resizeTimeout;
-ipcMain.handle("overlay:set-size", (_evt, { width, height }) => {
-  clearTimeout(resizeTimeout);
-  resizeTimeout = setTimeout(() => {
-    if (!overlay) return;
+ipcMain.handle("overlay:set-size", async (_evt, payload) => {
+  if (!overlay) return;
+
+  try {
+    // Defensive: verify object
+    if (!payload || typeof payload !== "object") {
+      console.warn("⚠️ overlay:set-size invalid payload type:", payload);
+      return;
+    }
+
+    const { width, height } = payload;
+    if (typeof width !== "number" || typeof height !== "number") {
+      console.warn("⚠️ overlay:set-size missing numeric width/height:", payload);
+      return;
+    }
+
+    // Wait slightly to let the DOM settle — no closure leak
+    await new Promise((r) => setTimeout(r, 200));
+
+    const fixedW = width;
     const minH = 120;
     const maxH = 800;
     const clampedH = Math.max(minH, Math.min(Math.round(height), maxH));
-    const clampedW = Math.max(400, Math.min(Math.round(width), 1000));
-    overlay.setSize(clampedW, clampedH);
-  }, 300);
+
+    overlay.setResizable(true);
+    overlay.setSize(fixedW, clampedH);
+    overlay.setResizable(false);
+  } catch (err) {
+    console.error("❌ overlay:set-size error:", err);
+  }
 });
+
+
+
+ipcMain.handle("summarize", async (_evt, text) => {
+  try {
+    console.log("🧠 Summarization IPC received.");
+    const { summary, followUps } = await summarizeWithGemini(text);
+    console.log("✅ Summarization complete — returning to renderer.");
+    return { summary, followUps };
+  } catch (err) {
+    console.error("❌ Summarization IPC error:", err);
+    return { summary: "Summarization failed.", followUps: [] };
+  }
+});
+
+// 💬 NEW — Q&A Handler
+ipcMain.handle("qa:ask", async (_evt, { text, question }) => {
+  try {
+    console.log("💬 Ask Mode:", question);
+    const answer = await qaWithGemini(text, question); // ✅ fixed variable
+    console.log("✅ Q&A done — sending back answer.");
+    return answer || "No answer generated.";
+  } catch (err) {
+    console.error("❌ Gemini Q&A error:", err);
+    return "Q&A failed.";
+  }
+});
+
+ipcMain.handle("refresh-window", () => {
+  if (overlay && !overlay.isDestroyed()) {
+    overlay.setBackgroundColor("#00000000");
+    overlay.setOpacity(0.9999);  // Force compositor to redraw
+    setTimeout(() => overlay.setOpacity(1), 50);
+  }
+});
+
+
 
 
 ipcMain.handle("overlay:toggle", () => {

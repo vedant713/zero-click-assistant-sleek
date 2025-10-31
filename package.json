@@ -3,13 +3,22 @@
   "version": "1.0.0",
   "main": "main/main.js",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "start": "electron ."
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "active-win": "^8.0.0",
+    "dotenv": "^17.2.3",
     "electron": "^32.0.0",
     "framer-motion": "^11.18.2",
+    "react-markdown": "^10.1.0",
     "robotjs": "^0.6.0",
     "yaml": "^2.3.4"
+  },
+  "devDependencies": {
+    "vite": "^7.1.10"
   }
 }
