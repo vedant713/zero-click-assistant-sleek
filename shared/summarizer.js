@@ -1,7 +1,8 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const http = require("http");
-const { config } = require("./config");
-const { logger } = require("./logger");
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const http = require('http');
+const { config } = require('./config');
+const features = require('./features');
+const { logger } = require('./logger');
 
 const genAI = config.gemini.apiKey ? new GoogleGenerativeAI(config.gemini.apiKey) : null;
 
@@ -36,23 +37,23 @@ async function checkOllamaAvailable() {
         {
           hostname: ollamaUrl.hostname,
           port: ollamaUrl.port || 11434,
-          path: "/api/tags",
-          method: "GET",
+          path: '/api/tags',
+          method: 'GET',
           timeout: 3000,
         },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", () => resolve({ statusCode: res.statusCode, body: data }));
+        res => {
+          let data = '';
+          res.on('data', chunk => (data += chunk));
+          res.on('end', () => resolve({ statusCode: res.statusCode, body: data }));
         }
       );
-      req.on("error", reject);
-      req.on("timeout", () => reject(new Error("Request timeout")));
+      req.on('error', reject);
+      req.on('timeout', () => reject(new Error('Request timeout')));
       req.end();
     });
     ollamaAvailable = response.statusCode === 200;
     if (ollamaAvailable) {
-      logger.ollama.complete("Ollama is available");
+      logger.ollama.complete('Ollama is available');
     } else {
       logger.ollama.warn(`Ollama responded with status: ${response.statusCode}`);
     }
@@ -64,12 +65,20 @@ async function checkOllamaAvailable() {
   }
 }
 
-async function callOllama(prompt, systemPrompt = "You are a helpful assistant.") {
+async function callOllama(prompt, systemPrompt = 'You are a helpful assistant.') {
+  let settings;
+  try {
+    settings = features.getSettings();
+  } catch (e) {
+    settings = {};
+  }
+  const model = settings?.ollamaModel || config.ollama.model;
+
   const response = await fetch(`${config.ollama.baseUrl}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: config.ollama.model,
+      model: model,
       prompt: prompt,
       system: systemPrompt,
       stream: false,
@@ -85,7 +94,7 @@ async function callOllama(prompt, systemPrompt = "You are a helpful assistant.")
 async function summarizeWithOllama(text) {
   try {
     const validText = validateText(text);
-    logger.ollama.start("Ollama summarization");
+    logger.ollama.start('Ollama summarization');
     const summaryPrompt = `
 You are a summarization assistant.
 Summarize the following text in 5–7 concise bullet points.
@@ -95,8 +104,11 @@ Be objective and clear.
 Text:
 ${validText}
 `;
-    const summary = await callOllama(summaryPrompt, "You are a summarization assistant that creates concise bullet-point summaries.");
-    const cleanedSummary = summary.replace(/^['\''.\d\-\*\)\s]+/, "").trim();
+    const summary = await callOllama(
+      summaryPrompt,
+      'You are a summarization assistant that creates concise bullet-point summaries.'
+    );
+    const cleanedSummary = summary.replace(/^['\''.\d\-\*\)\s]+/, '').trim();
 
     let followUps = [];
     try {
@@ -111,17 +123,20 @@ ${validText}
 Summary:
 ${cleanedSummary}
 `;
-      const rawFollowUps = await callOllama(followPrompt, "You suggest 3 follow-up questions based on provided text. Output as simple numbered list.");
+      const rawFollowUps = await callOllama(
+        followPrompt,
+        'You suggest 3 follow-up questions based on provided text. Output as simple numbered list.'
+      );
       followUps = rawFollowUps
-        .split("\n")
-        .map((q) => q.replace(/^['\''.\d\-\*\)\s]+/, "").trim())
+        .split('\n')
+        .map(q => q.replace(/^['\''.\d\-\*\)\s]+/, '').trim())
         .filter(
-          (q) =>
+          q =>
             q.length > 0 &&
-            !q.toLowerCase().startsWith("here are") &&
-            !q.toLowerCase().startsWith("based on") &&
-            !q.toLowerCase().startsWith("text:") &&
-            !q.toLowerCase().startsWith("summary:")
+            !q.toLowerCase().startsWith('here are') &&
+            !q.toLowerCase().startsWith('based on') &&
+            !q.toLowerCase().startsWith('text:') &&
+            !q.toLowerCase().startsWith('summary:')
         )
         .slice(0, 3);
     } catch (e) {
@@ -129,10 +144,10 @@ ${cleanedSummary}
       followUps = [];
     }
 
-    logger.ollama.complete("Ollama summarization");
+    logger.ollama.complete('Ollama summarization');
     return { summary: cleanedSummary, followUps };
   } catch (err) {
-    logger.ollama.fail("Ollama summarization", err);
+    logger.ollama.fail('Ollama summarization', err);
     throw err;
   }
 }
@@ -145,7 +160,7 @@ async function qaWithOllama(context, question) {
     if (!question || typeof question !== 'string') {
       throw new Error('Question is required');
     }
-    logger.ollama.start("Ollama Q&A");
+    logger.ollama.start('Ollama Q&A');
     const prompt = `
 You are a helpful assistant.
 Use the following context to answer the user's question clearly and concisely.
@@ -158,11 +173,14 @@ ${context}
 Question:
 ${question}
 `;
-    const answer = await callOllama(prompt, "You answer questions based on the provided context. Be clear and concise.");
-    logger.ollama.complete("Ollama Q&A");
-    return answer.replace(/^['\''.\d\-\*\)\s]+/, "").trim();
+    const answer = await callOllama(
+      prompt,
+      'You answer questions based on the provided context. Be clear and concise.'
+    );
+    logger.ollama.complete('Ollama Q&A');
+    return answer.replace(/^['\''.\d\-\*\)\s]+/, '').trim();
   } catch (err) {
-    logger.ollama.fail("Ollama Q&A", err);
+    logger.ollama.fail('Ollama Q&A', err);
     throw err;
   }
 }
@@ -173,7 +191,7 @@ async function summarizeWithGemini(text) {
   }
   try {
     const validText = validateText(text);
-    logger.gemini.start("Gemini summarization");
+    logger.gemini.start('Gemini summarization');
     const model = genAI.getGenerativeModel({ model: config.gemini.model });
 
     const summaryPrompt = `
@@ -187,9 +205,9 @@ ${validText}
 `;
 
     const result = await model.generateContent(summaryPrompt);
-    const summary = result?.response?.text?.().trim?.() || "No summary generated.";
+    const summary = result?.response?.text?.().trim?.() || 'No summary generated.';
 
-    logger.gemini.info("Summary generated.");
+    logger.gemini.info('Summary generated.');
 
     let followUps = [];
     try {
@@ -206,18 +224,18 @@ ${summary}
 `;
 
       const qResult = await model.generateContent(followPrompt);
-      const rawText = qResult?.response?.text?.().trim?.() || "";
+      const rawText = qResult?.response?.text?.().trim?.() || '';
 
       followUps = rawText
-        .split("\n")
-        .map((q) => q.replace(/^[\d\-\*\.\)]\s*/, "").trim())
+        .split('\n')
+        .map(q => q.replace(/^[\d\-\*\.\)]\s*/, '').trim())
         .filter(
-          (q) =>
+          q =>
             q.length > 0 &&
-            !q.toLowerCase().startsWith("here are") &&
-            !q.toLowerCase().startsWith("based on") &&
-            !q.toLowerCase().startsWith("text:") &&
-            !q.toLowerCase().startsWith("summary:")
+            !q.toLowerCase().startsWith('here are') &&
+            !q.toLowerCase().startsWith('based on') &&
+            !q.toLowerCase().startsWith('text:') &&
+            !q.toLowerCase().startsWith('summary:')
         )
         .slice(0, 3);
     } catch (e) {
@@ -228,8 +246,8 @@ ${summary}
     logger.gemini.debug(`Follow-up questions generated: ${followUps.length}`);
     return { summary, followUps };
   } catch (err) {
-    logger.gemini.fail("Gemini summarization", err);
-    return { summary: "Summarization failed.", followUps: [] };
+    logger.gemini.fail('Gemini summarization', err);
+    return { summary: 'Summarization failed.', followUps: [] };
   }
 }
 
@@ -244,7 +262,7 @@ async function qaWithGemini(context, question) {
     if (!question || typeof question !== 'string') {
       throw new Error('Question is required');
     }
-    logger.gemini.start("Gemini Q&A");
+    logger.gemini.start('Gemini Q&A');
     const model = genAI.getGenerativeModel({ model: config.gemini.model });
 
     const prompt = `
@@ -261,12 +279,12 @@ ${question}
 `;
 
     const result = await model.generateContent(prompt);
-    const answer = result?.response?.text?.().trim?.() || "No answer generated.";
+    const answer = result?.response?.text?.().trim?.() || 'No answer generated.';
 
-    logger.gemini.complete("Gemini Q&A");
+    logger.gemini.complete('Gemini Q&A');
     return answer;
   } catch (err) {
-    logger.gemini.fail("Gemini Q&A", err);
+    logger.gemini.fail('Gemini Q&A', err);
     return "I couldn't generate an answer.";
   }
 }
@@ -277,9 +295,9 @@ function getMockSummary(text) {
   return {
     summary,
     followUps: [
-      "What are the main points discussed in this text?",
-      "How does this information relate to the broader context?",
-      "What conclusions can be drawn from this content?",
+      'What are the main points discussed in this text?',
+      'How does this information relate to the broader context?',
+      'What conclusions can be drawn from this content?',
     ],
   };
 }
@@ -290,59 +308,59 @@ function getMockAnswer(question) {
 
 async function summarize(text) {
   const isOllamaAvailable = await checkOllamaAvailable();
-  
+
   if (isOllamaAvailable) {
     try {
       return await summarizeWithOllama(text);
     } catch (err) {
-      logger.ollama.warn("Ollama failed, falling back to Gemini");
+      logger.ollama.warn('Ollama failed, falling back to Gemini');
     }
   }
-  
+
   if (config.gemini.apiKey) {
     try {
       return await summarizeWithGemini(text);
     } catch (err) {
-      logger.gemini.warn("Gemini failed, falling back to mock mode");
+      logger.gemini.warn('Gemini failed, falling back to mock mode');
     }
   }
-  
-  logger.app.info("Using mock summarization mode");
+
+  logger.app.info('Using mock summarization mode');
   return getMockSummary(text);
 }
 
 async function qa(context, question) {
   const isOllamaAvailable = await checkOllamaAvailable();
-  
+
   if (isOllamaAvailable) {
     try {
       return await qaWithOllama(context, question);
     } catch (err) {
-      logger.ollama.warn("Ollama failed, falling back to Gemini");
+      logger.ollama.warn('Ollama failed, falling back to Gemini');
     }
   }
-  
+
   if (config.gemini.apiKey) {
     try {
       return await qaWithGemini(context, question);
     } catch (err) {
-      logger.gemini.warn("Gemini failed, falling back to mock mode");
+      logger.gemini.warn('Gemini failed, falling back to mock mode');
     }
   }
-  
-  logger.app.info("Using mock Q&A mode");
+
+  logger.app.info('Using mock Q&A mode');
   return getMockAnswer(question);
 }
 
-module.exports = { 
-  summarize, 
-  qa, 
-  summarizeWithGemini, 
-  qaWithGemini, 
-  summarizeWithOllama, 
+module.exports = {
+  summarize,
+  qa,
+  summarizeWithGemini,
+  qaWithGemini,
+  summarizeWithOllama,
   qaWithOllama,
   checkOllamaAvailable,
   resetOllamaCache,
   getMockSummary,
-  getMockAnswer
+  getMockAnswer,
 };

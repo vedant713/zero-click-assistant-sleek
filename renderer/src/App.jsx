@@ -348,8 +348,11 @@ export default function App() {
   const [activePanel, setActivePanel] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [settings, setSettings] = useState({});
+  const [autoStart, setAutoStart] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [summaryError, setSummaryError] = useState('');
+  const [qaError, setQaError] = useState('');
 
   const styles = getStyles(theme);
 
@@ -358,6 +361,7 @@ export default function App() {
     if (activePanel !== panel) {
       if (panel === 'settings' && !settings.theme) {
         window.electronAPI.getSettings().then(setSettings);
+        window.electronAPI.getAutoStart().then(enabled => setAutoStart(enabled));
       }
     }
   };
@@ -380,22 +384,33 @@ export default function App() {
     if (!window.electronAPI) return;
 
     const handleClipboard = t => {
-      if (t !== lastClipboardText) {
-        setLastClipboardText(t);
-        if (conversation.length === 0) {
-          setSummary('');
-          setAnswer('');
-          setFollowUps([]);
+      setSummaryError('');
+      try {
+        if (t !== lastClipboardText) {
+          setLastClipboardText(t);
+          if (conversation.length === 0) {
+            setSummary('');
+            setAnswer('');
+            setFollowUps([]);
+          }
         }
-      }
-      setClipboardText(t);
-      if (mode === 'summarize' && conversation.length === 0) {
-        setLoading(true);
-        window.electronAPI.summarize(t);
+        setClipboardText(t);
+        if (mode === 'summarize' && conversation.length === 0) {
+          setLoading(true);
+          window.electronAPI.summarize(t);
+        }
+      } catch (err) {
+        setLoading(false);
+        setSummaryError('Failed to process clipboard content. Please try again.');
       }
     };
 
-    const handleSummary = ({ text, summary, followUps = [] }) => {
+    const handleSummary = ({ text, summary, followUps = [], error }) => {
+      if (error) {
+        setLoading(false);
+        setSummaryError('Failed to generate summary. Please try again.');
+        return;
+      }
       setClipboardText(text);
       setSummary(summary);
       setFollowUps(followUps);
@@ -437,6 +452,8 @@ export default function App() {
     setAnswerLoading(false);
     setFollowUps([]);
     setConversation([]);
+    setSummaryError('');
+    setQaError('');
   }, [mode]);
 
   useEffect(() => {
@@ -459,12 +476,13 @@ export default function App() {
   const handleAsk = async () => {
     if (!question.trim()) return;
     setAnswer('');
+    setQaError('');
     setAnswerLoading(true);
     try {
       const res = await window.electronAPI.qa(clipboardText, question);
       setAnswer(res || 'No answer received.');
     } catch (err) {
-      setAnswer('Failed to generate an answer.');
+      setQaError('Unable to get an answer. Please check your connection and try again.');
     } finally {
       setAnswerLoading(false);
     }
@@ -475,6 +493,7 @@ export default function App() {
     setQuestion(cleanQ);
     setAnswer('');
     setFollowUps([]);
+    setQaError('');
     setAnswerLoading(true);
     try {
       const res = await window.electronAPI.qa(clipboardText, q);
@@ -487,7 +506,7 @@ export default function App() {
       ]);
       setFollowUps(followData?.followUps || []);
     } catch (err) {
-      setAnswer('Failed to generate answer.');
+      setQaError('Unable to process your question. Please try again.');
     } finally {
       setAnswerLoading(false);
     }
@@ -775,6 +794,53 @@ export default function App() {
                 />
               </button>
             </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 12px',
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)' }}>
+                🚀 Start with Windows
+              </span>
+              <button
+                onClick={async () => {
+                  const newValue = !autoStart;
+                  setAutoStart(newValue);
+                  await window.electronAPI.setAutoStart(newValue);
+                }}
+                style={{
+                  width: 36,
+                  height: 20,
+                  borderRadius: 10,
+                  border: 'none',
+                  background: autoStart
+                    ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                    : 'rgba(255,255,255,0.1)',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'all 0.3s',
+                }}
+              >
+                <div
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    position: 'absolute',
+                    top: 3,
+                    left: autoStart ? 19 : 3,
+                    transition: 'all 0.3s',
+                  }}
+                />
+              </button>
+            </div>
             <button
               onClick={async () => {
                 await window.electronAPI.saveSettings(settings);
@@ -946,6 +1012,24 @@ export default function App() {
                 </motion.div>
               )}
 
+              {summaryError && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{
+                    marginTop: 10,
+                    padding: '10px 12px',
+                    background: 'rgba(239,68,68,0.1)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: 8,
+                    color: '#fca5a5',
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  ⚠️ {summaryError}
+                </motion.div>
+              )}
+
               {summary && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -1084,6 +1168,25 @@ export default function App() {
                   }}
                 >
                   💭 Thinking...
+                </motion.div>
+              )}
+
+              {qaError && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{
+                    marginTop: 12,
+                    padding: '10px 12px',
+                    background: 'rgba(239,68,68,0.1)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: 8,
+                    color: '#fca5a5',
+                    fontSize: '0.8rem',
+                    textAlign: 'center',
+                  }}
+                >
+                  ⚠️ {qaError}
                 </motion.div>
               )}
 
