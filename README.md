@@ -1,126 +1,116 @@
-# Zero-Click AI Assistant Overlay
+# Zero-Click Assistant - Sleek
 
-A transparent, always-on-top desktop overlay application that monitors your clipboard and provides AI-powered summarization and Q&A capabilities using Google Gemini AI. Optionally supports Ollama for local AI processing.
+A modern, transparent AI assistant overlay for Windows that monitors your clipboard and provides instant AI-powered summarization and Q&A capabilities using Google Gemini AI.
 
-## Features
+![Zero-Click Assistant](https://img.shields.io/badge/Zero--Click-Assistant-blue?style=flat-square)
+![Electron](https://img.shields.io/badge/Electron-47848F?style=flat-square&logo=electron)
+![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite)
 
-- **Transparent Overlay Window** - Floating, always-on-top window that stays visible above other applications
-- **Clipboard Monitoring** - Automatically detects and summarizes copied text content
-- **Active Window Tracking** - Monitors which application is currently in focus
-- **AI Summarization** - Uses Google Gemini AI to summarize copied content with intelligent follow-up questions
-- **Q&A Mode** - Ask questions about the current content and receive AI-powered answers
-- **Global Hotkeys** - Full keyboard control without leaving your current application
+## ✨ Features
 
-## Prerequisites
+- **Transparent Overlay** - Floating, always-on-top window with glass-morphism design
+- **Smart Clipboard Monitoring** - Automatically detects and summarizes copied text
+- **AI Summarization** - Instant summaries using Google Gemini AI
+- **Interactive Q&A** - Ask follow-up questions about any content
+- **Global Hotkeys** - Full keyboard control from any application
+- **Minimal Footprint** - Lightweight and resource-efficient
+
+## 🚀 Quick Start
+
+### Prerequisites
 
 - **Node.js** 18.0 or higher
-- **Google API Key** - Get one from [Google AI Studio](https://makersuite.google.com/app/apikey)
-- (Optional) **Ollama** - For local AI processing ([ollama.ai](https://ollama.ai))
+- **Google API Key** - Get free key at [Google AI Studio](https://makersuite.google.com/app/apikey)
 
-## Installation
+### Installation
 
-1. Clone the repository and navigate to the project directory:
-   ```bash
-   cd zero-click-assistant-overlay
-   ```
-
-2. Install root dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Install renderer dependencies:
-   ```bash
-   cd renderer
-   npm install
-   cd ..
-   ```
-
-4. Create a `.env` file in the project root:
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Or create it manually with the following content:
-   ```
-   GOOGLE_API_KEY=your_google_api_key_here
-   ```
-
-5. (Optional) If using Ollama for local AI, ensure Ollama is running:
-   ```bash
-   ollama serve
-   ```
-
-## Usage
-
-### Starting the Application
-
-Run the application with Electron:
 ```bash
+# Clone and navigate
+cd zero-click-assistant-overlay
+
+# Install dependencies
+npm install
+cd renderer && npm install && cd ..
+
+# Setup environment
+cp .env.example .env
+# Edit .env and add your GOOGLE_API_KEY
+```
+
+### Run
+
+```bash
+# Development mode
+npm run dev
+
+# Production build
+npm run build
 npm start
 ```
 
-Or use the provided batch file:
-```bash
-run.bat
-```
+Or use the provided batch files:
+- `run.bat` - Start the application
+- `run-dev.bat` - Run in development mode
 
-For development mode with hot-reload:
-```bash
-npm run dev
-```
-
-### Global Shortcuts
+## ⌨️ Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Alt+O` | Toggle overlay visibility |
-| `Ctrl+Alt+R` | Reset overlay position to center |
-| `Arrow Keys` | Move overlay window |
+| `Ctrl+Alt+R` | Reset overlay to center |
+| `Arrow Keys` | Move overlay position |
 | `Ctrl+Alt+X` | Quit application |
 
-### Using the Overlay
+## ⚙️ Configuration
 
-1. **Copy any text** - The application automatically detects copied content and displays an AI summary
-2. **Ask follow-up questions** - Type questions in the input field to get more details about the summarized content
-3. **Q&A Mode** - Switch to Q&A mode to ask general questions or analyze the current clipboard content
+Create a `.env` file in the root directory:
 
-## Environment Variables
-
-Create a `.env` file in the project root with the following variables:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GOOGLE_API_KEY` | Yes | Your Google Gemini API key |
-| `OLLAMA_URL` | No | Ollama server URL (default: `http://localhost:11434`) |
-| `USE_OLLAMA` | No | Set to `true` to use Ollama instead of Google Gemini |
-
-Example `.env` file:
-```
+```env
 GOOGLE_API_KEY=your_google_api_key_here
 OLLAMA_URL=http://localhost:11434
 USE_OLLAMA=false
 ```
 
-## Folder Structure
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOOGLE_API_KEY` | Required | Your Google Gemini API key |
+| `OLLAMA_URL` | localhost:11434 | Ollama server URL (optional) |
+| `USE_OLLAMA` | false | Use Ollama instead of Gemini |
+
+## 📁 Project Structure
 
 ```
 zero-click-assistant-overlay/
 ├── main/                    # Electron main process
-│   ├── main.js             # Main entry point, window management, IPC
-│   ├── preload.js          # Preload script for secure IPC
-│   └── sensors/            # System sensors (clipboard, active window)
-├── renderer/               # React frontend
-│   ├── src/               # React components and logic
+│   ├── main.js             # Window management & IPC
+│   ├── preload.js          # Secure bridge between processes
+│   └── sensors/            # System sensors
+├── renderer/               # React frontend (Vite)
+│   ├── src/               # React components
 │   ├── public/            # Static assets
-│   ├── index.html         # HTML entry point
 │   └── vite.config.js     # Vite configuration
-├── shared/                # Shared code between main and renderer
-│   └── summarizer.js      # AI summarization logic
-├── package.json           # Root dependencies and scripts
-└── README.md              # This file
+├── shared/                # Shared utilities
+│   ├── summarizer.js      # AI summarization
+│   ├── config.js          # Configuration
+│   ├── features.js        # Feature flags
+│   └── logger.js          # Logging utility
+├── tests/                 # Unit tests
+├── data/                  # User data (conversations, settings)
+└── package.json           # Root package.json
 ```
 
-## License
+## 🛠️ Tech Stack
 
-MIT License
+- **Electron** - Desktop application framework
+- **React 18** - UI library
+- **Vite** - Build tool
+- **Google Gemini AI** - AI summarization
+
+## 📝 License
+
+MIT License - Feel free to use and modify!
+
+---
+
+Made with ❤️ using Electron + React
