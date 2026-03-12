@@ -1,7 +1,14 @@
 const { clipboard } = require('electron');
 let last = '';
 let debounceTimer = null;
-const DEBOUNCE_MS = 1500;
+let watchInterval = null;
+
+let options = {
+  debounceTime: 1500,
+  minLength: 40,
+};
+
+let isPaused = false;
 
 const SENSITIVE_PATTERNS = [
   /(password|passwd|pwd|secret)\s*[:=]\s*/i,
@@ -57,10 +64,20 @@ function maskSensitiveData(text) {
   return masked;
 }
 
-function watchClipboard(callback) {
-  setInterval(() => {
+function watchClipboard(callback, opts = {}) {
+  const { debounceTime = 1500, minLength = 40 } = opts;
+  options.debounceTime = debounceTime;
+  options.minLength = minLength;
+
+  if (watchInterval) {
+    clearInterval(watchInterval);
+  }
+
+  watchInterval = setInterval(() => {
+    if (isPaused) return;
+
     const text = clipboard.readText();
-    if (text && text !== last && text.length > 40) {
+    if (text && text !== last && text.length > options.minLength) {
       if (containsSensitiveData(text)) {
         return;
       }
@@ -68,9 +85,42 @@ function watchClipboard(callback) {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         callback(text);
-      }, DEBOUNCE_MS);
+      }, options.debounceTime);
     }
   }, 500);
 }
 
-module.exports = { watchClipboard, containsSensitiveData, maskSensitiveData };
+function setOptions(opts) {
+  if (typeof opts.debounceTime === 'number' && opts.debounceTime > 0) {
+    options.debounceTime = opts.debounceTime;
+  }
+  if (typeof opts.minLength === 'number' && opts.minLength > 0) {
+    options.minLength = opts.minLength;
+  }
+}
+
+function pause() {
+  isPaused = true;
+}
+
+function resume() {
+  isPaused = false;
+}
+
+function getStatus() {
+  return {
+    isPaused,
+    debounceTime: options.debounceTime,
+    minLength: options.minLength,
+  };
+}
+
+module.exports = {
+  watchClipboard,
+  setOptions,
+  pause,
+  resume,
+  getStatus,
+  containsSensitiveData,
+  maskSensitiveData,
+};

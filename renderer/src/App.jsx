@@ -353,8 +353,125 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [summaryError, setSummaryError] = useState('');
   const [qaError, setQaError] = useState('');
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [toasts, setToasts] = useState([]);
+  const [hotkeys, setHotkeys] = useState({});
+  const [editingHotkey, setEditingHotkey] = useState(null);
+
+  const showToast = (message, type = 'info', duration = 3000) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, duration);
+  };
 
   const styles = getStyles(theme);
+
+  const commands = [
+    {
+      id: 'summarize',
+      label: 'Summarize Clipboard',
+      icon: '📋',
+      action: () => setMode('summarize'),
+    },
+    { id: 'ask', label: 'Ask Question', icon: '❓', action: () => setMode('qa') },
+    {
+      id: 'history',
+      label: 'View History',
+      icon: '📜',
+      action: () => {
+        handlePanelToggle('history');
+        setShowCommandPalette(false);
+      },
+    },
+    {
+      id: 'bookmarks',
+      label: 'View Bookmarks',
+      icon: '🔖',
+      action: () => {
+        handlePanelToggle('bookmarks');
+        setShowCommandPalette(false);
+      },
+    },
+    {
+      id: 'analysis',
+      label: 'Analyze Text',
+      icon: '📊',
+      action: () => {
+        handlePanelToggle('analysis');
+        setShowCommandPalette(false);
+      },
+    },
+    {
+      id: 'settings',
+      label: 'Open Settings',
+      icon: '⚙️',
+      action: () => {
+        handlePanelToggle('settings');
+        setShowCommandPalette(false);
+      },
+    },
+    {
+      id: 'toggle-theme',
+      label: 'Toggle Theme',
+      icon: theme === 'dark' ? '☀️' : '🌙',
+      action: () => {
+        setTheme(theme === 'dark' ? 'light' : 'dark');
+        setShowCommandPalette(false);
+      },
+    },
+    {
+      id: 'pause',
+      label: 'Pause Monitoring',
+      icon: '⏸️',
+      action: () => {
+        window.electronAPI.clipboardPause();
+        setShowCommandPalette(false);
+      },
+    },
+    {
+      id: 'resume',
+      label: 'Resume Monitoring',
+      icon: '▶️',
+      action: () => {
+        window.electronAPI.clipboardResume();
+        setShowCommandPalette(false);
+      },
+    },
+    {
+      id: 'export-json',
+      label: 'Export as JSON',
+      icon: '📦',
+      action: () => {
+        showToast('Exported successfully', 'success');
+        setShowCommandPalette(false);
+      },
+    },
+    {
+      id: 'export-html',
+      label: 'Export as HTML',
+      icon: '🌐',
+      action: () => {
+        showToast('Exported successfully', 'success');
+        setShowCommandPalette(false);
+      },
+    },
+    {
+      id: 'quit',
+      label: 'Quit Application',
+      icon: '🚪',
+      action: () => {
+        window.electronAPI.quit();
+      },
+    },
+  ];
+
+  const filteredCommands = commands.filter(cmd =>
+    cmd.label.toLowerCase().includes(commandQuery.toLowerCase())
+  );
 
   const handlePanelToggle = panel => {
     setActivePanel(activePanel === panel ? null : panel);
@@ -362,6 +479,7 @@ export default function App() {
       if (panel === 'settings' && !settings.theme) {
         window.electronAPI.getSettings().then(setSettings);
         window.electronAPI.getAutoStart().then(enabled => setAutoStart(enabled));
+        window.electronAPI.getHotkeys().then(setHotkeys);
       }
     }
   };
@@ -402,6 +520,7 @@ export default function App() {
       } catch (err) {
         setLoading(false);
         setSummaryError('Failed to process clipboard content. Please try again.');
+        showToast('Something went wrong', 'error');
       }
     };
 
@@ -409,6 +528,7 @@ export default function App() {
       if (error) {
         setLoading(false);
         setSummaryError('Failed to generate summary. Please try again.');
+        showToast('Something went wrong', 'error');
         return;
       }
       setClipboardText(text);
@@ -473,6 +593,32 @@ export default function App() {
     activePanel,
   ]);
 
+  useEffect(() => {
+    const handleKeyDown = e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(true);
+      }
+      if (showCommandPalette && e.key === 'Escape') {
+        setShowCommandPalette(false);
+      }
+      if (showCommandPalette && e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedCommandIndex(i => Math.min(i + 1, filteredCommands.length - 1));
+      }
+      if (showCommandPalette && e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedCommandIndex(i => Math.max(i - 1, 0));
+      }
+      if (showCommandPalette && e.key === 'Enter') {
+        e.preventDefault();
+        filteredCommands[selectedCommandIndex]?.action();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showCommandPalette, selectedCommandIndex, filteredCommands]);
+
   const handleAsk = async () => {
     if (!question.trim()) return;
     setAnswer('');
@@ -483,6 +629,7 @@ export default function App() {
       setAnswer(res || 'No answer received.');
     } catch (err) {
       setQaError('Unable to get an answer. Please check your connection and try again.');
+      showToast('Something went wrong', 'error');
     } finally {
       setAnswerLoading(false);
     }
@@ -507,6 +654,7 @@ export default function App() {
       setFollowUps(followData?.followUps || []);
     } catch (err) {
       setQaError('Unable to process your question. Please try again.');
+      showToast('Something went wrong', 'error');
     } finally {
       setAnswerLoading(false);
     }
@@ -841,9 +989,225 @@ export default function App() {
                 />
               </button>
             </div>
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '0.65rem',
+                  color: 'rgba(255,255,255,0.5)',
+                  marginBottom: 4,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                Window Opacity
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <input
+                  type="range"
+                  min="30"
+                  max="100"
+                  value={Math.round((settings.windowOpacity || 1) * 100)}
+                  onChange={e => {
+                    const opacity = parseInt(e.target.value) / 100;
+                    setSettings({ ...settings, windowOpacity: opacity });
+                    window.electronAPI.setOpacity(opacity);
+                  }}
+                  style={{ flex: 1, accentColor: '#6366f1' }}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', minWidth: 35 }}>
+                  {Math.round((settings.windowOpacity || 1) * 100)}%
+                </span>
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 12px',
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)' }}>
+                📌 Always On Top
+              </span>
+              <button
+                onClick={() => {
+                  const newValue = !settings.alwaysOnTop;
+                  setSettings({ ...settings, alwaysOnTop: newValue });
+                  window.electronAPI.setAlwaysOnTop(newValue);
+                }}
+                style={{
+                  width: 36,
+                  height: 20,
+                  borderRadius: 10,
+                  border: 'none',
+                  background: settings.alwaysOnTop
+                    ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                    : 'rgba(255,255,255,0.1)',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'all 0.3s',
+                }}
+              >
+                <div
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    position: 'absolute',
+                    top: 3,
+                    left: settings.alwaysOnTop ? 19 : 3,
+                    transition: 'all 0.3s',
+                  }}
+                />
+              </button>
+            </div>
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '0.65rem',
+                  color: 'rgba(255,255,255,0.5)',
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                Window Size
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {['small', 'medium', 'large', 'wide'].map(preset => (
+                  <button
+                    key={preset}
+                    onClick={() => window.electronAPI.setPreset(preset)}
+                    style={{
+                      flex: 1,
+                      padding: '6px 8px',
+                      borderRadius: 6,
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: '#fff',
+                      fontSize: '0.7rem',
+                      cursor: 'pointer',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 8,
+                }}
+              >
+                <label
+                  style={{
+                    fontSize: '0.65rem',
+                    color: 'rgba(255,255,255,0.5)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  Keyboard Shortcuts
+                </label>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+                Press Ctrl+K for command palette
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  display: 'grid',
+                  gap: 6,
+                  maxHeight: 180,
+                  overflowY: 'auto',
+                }}
+              >
+                {[
+                  { key: 'toggle', label: 'Toggle Overlay' },
+                  { key: 'resetPosition', label: 'Reset Position' },
+                  { key: 'moveUp', label: 'Move Up' },
+                  { key: 'moveDown', label: 'Move Down' },
+                  { key: 'moveLeft', label: 'Move Left' },
+                  { key: 'moveRight', label: 'Move Right' },
+                  { key: 'quit', label: 'Quit' },
+                  { key: 'snapTopLeft', label: 'Snap Top Left' },
+                  { key: 'snapTopCenter', label: 'Snap Top Center' },
+                  { key: 'snapTopRight', label: 'Snap Top Right' },
+                  { key: 'snapBottomLeft', label: 'Snap Bottom Left' },
+                  { key: 'snapBottomCenter', label: 'Snap Bottom Center' },
+                  { key: 'snapBottomRight', label: 'Snap Bottom Right' },
+                  { key: 'snapCenter', label: 'Snap Center' },
+                  { key: 'snapReset', label: 'Snap Reset' },
+                  { key: 'commandPalette', label: 'Command Palette' },
+                ].map(item => (
+                  <div
+                    key={item.key}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '4px 8px',
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: 6,
+                      border:
+                        editingHotkey === item.key
+                          ? '1px solid rgba(99,102,241,0.5)'
+                          : '1px solid rgba(255,255,255,0.06)',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => {
+                      setEditingHotkey(item.key);
+                      const newHotkey = prompt(
+                        `Enter new hotkey for ${item.label}:`,
+                        hotkeys[item.key] || ''
+                      );
+                      if (newHotkey) {
+                        const newHotkeys = { ...hotkeys, [item.key]: newHotkey };
+                        setHotkeys(newHotkeys);
+                        window.electronAPI.saveHotkeys(newHotkeys);
+                        showToast('Hotkey updated', 'success');
+                      }
+                      setEditingHotkey(null);
+                    }}
+                  >
+                    <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)' }}>
+                      {item.label}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '0.65rem',
+                        color: '#a5b4fc',
+                        background: 'rgba(99,102,241,0.15)',
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        fontFamily: "'Cascadia Code', 'Consolas', monospace",
+                      }}
+                    >
+                      {(hotkeys[item.key] || '').replace('CommandOrControl', 'Ctrl')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
             <button
               onClick={async () => {
                 await window.electronAPI.saveSettings(settings);
+                if (Object.keys(hotkeys).length > 0) {
+                  await window.electronAPI.saveHotkeys(hotkeys);
+                }
+                showToast('Settings saved', 'success');
                 setActivePanel(null);
               }}
               style={{
@@ -871,6 +1235,158 @@ export default function App() {
 
   return (
     <AnimatePresence>
+      {showCommandPalette && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            paddingTop: '15vh',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowCommandPalette(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            style={{
+              width: 480,
+              maxHeight: '60vh',
+              background: theme === 'dark' ? 'rgba(30,30,45,0.98)' : 'rgba(255,255,255,0.98)',
+              borderRadius: 14,
+              border: '1px solid rgba(255,255,255,0.1)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <input
+                type="text"
+                placeholder="Type a command..."
+                value={commandQuery}
+                onChange={e => {
+                  setCommandQuery(e.target.value);
+                  setSelectedCommandIndex(0);
+                }}
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(99,102,241,0.4)',
+                  background: 'rgba(255,255,255,0.05)',
+                  color: theme === 'dark' ? '#fff' : '#1a1a2e',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                }}
+              />
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '6px' }}>
+              {filteredCommands.map((cmd, idx) => (
+                <div
+                  key={cmd.id}
+                  onClick={() => {
+                    cmd.action();
+                    setShowCommandPalette(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    background:
+                      idx === selectedCommandIndex ? 'rgba(99,102,241,0.2)' : 'transparent',
+                    border:
+                      idx === selectedCommandIndex
+                        ? '1px solid rgba(99,102,241,0.3)'
+                        : '1px solid transparent',
+                    transition: 'all 0.1s',
+                  }}
+                >
+                  <span style={{ fontSize: '1.1rem' }}>{cmd.icon}</span>
+                  <span
+                    style={{ color: theme === 'dark' ? '#e4e4e7' : '#1a1a2e', fontSize: '0.85rem' }}
+                  >
+                    {cmd.label}
+                  </span>
+                </div>
+              ))}
+              {filteredCommands.length === 0 && (
+                <div
+                  style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    color: 'rgba(255,255,255,0.4)',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  No commands found
+                </div>
+              )}
+            </div>
+            <div
+              style={{
+                padding: '8px 16px',
+                borderTop: '1px solid rgba(255,255,255,0.1)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '0.65rem',
+                color: 'rgba(255,255,255,0.4)',
+              }}
+            >
+              <span>↑↓ Navigate</span>
+              <span>Enter Select</span>
+              <span>Esc Close</span>
+            </div>
+            {toasts.length > 0 && (
+              <div style={{ position: 'fixed', bottom: 60, right: 16, zIndex: 1000 }}>
+                {toasts.map(toast => (
+                  <motion.div
+                    key={toast.id}
+                    initial={{ opacity: 0, x: 50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 50 }}
+                    style={{
+                      background:
+                        toast.type === 'success'
+                          ? '#22c55e'
+                          : toast.type === 'error'
+                            ? '#ef4444'
+                            : toast.type === 'warning'
+                              ? '#f59e0b'
+                              : '#3b82f6',
+                      color: '#fff',
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                      fontSize: '0.8rem',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    }}
+                  >
+                    {toast.message}
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
       {visible && (
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -1219,6 +1735,10 @@ export default function App() {
                   animate={{ opacity: 1, y: 0 }}
                   style={styles.shortcutsPopup}
                 >
+                  <div style={styles.shortcutRow}>
+                    <span>Ctrl+K</span>
+                    <span>Commands</span>
+                  </div>
                   <div style={styles.shortcutRow}>
                     <span>Ctrl+Shift+Space</span>
                     <span>Toggle</span>
