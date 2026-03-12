@@ -1,21 +1,41 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const http = require("http");
-require("dotenv").config();
+const { config } = require("./config");
+const { logger } = require("./logger");
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+const genAI = config.gemini.apiKey ? new GoogleGenerativeAI(config.gemini.apiKey) : null;
+
+function validateText(text, maxLength = 50000) {
+  if (!text || typeof text !== 'string') {
+    throw new Error('Text is required and must be a string');
+  }
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    throw new Error('Text cannot be empty');
+  }
+  if (trimmed.length > maxLength) {
+    throw new Error(`Text exceeds maximum length of ${maxLength} characters`);
+  }
+  return trimmed;
+}
 
 let ollamaAvailable = null;
+
+function resetOllamaCache() {
+  ollamaAvailable = null;
+}
 
 async function checkOllamaAvailable() {
   if (ollamaAvailable !== null) {
     return ollamaAvailable;
   }
   try {
+    const ollamaUrl = new URL(config.ollama.baseUrl);
     const response = await new Promise((resolve, reject) => {
       const req = http.request(
         {
-          hostname: "localhost",
-          port: 11434,
+          hostname: ollamaUrl.hostname,
+          port: ollamaUrl.port || 11434,
           path: "/api/tags",
           method: "GET",
           timeout: 3000,
@@ -32,24 +52,24 @@ async function checkOllamaAvailable() {
     });
     ollamaAvailable = response.statusCode === 200;
     if (ollamaAvailable) {
-      console.log("✅ Ollama is available");
+      logger.ollama.complete("Ollama is available");
     } else {
-      console.log("⚠️ Ollama responded with status:", response.statusCode);
+      logger.ollama.warn(`Ollama responded with status: ${response.statusCode}`);
     }
     return ollamaAvailable;
   } catch (err) {
-    console.log("❌ Ollama not available:", err.message);
+    logger.ollama.warn(`Ollama not available: ${err.message}`);
     ollamaAvailable = false;
     return false;
   }
 }
 
 async function callOllama(prompt, systemPrompt = "You are a helpful assistant.") {
-  const response = await fetch("http://localhost:11434/api/generate", {
+  const response = await fetch(`${config.ollama.baseUrl}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "llama3:latest",
+      model: config.ollama.model,
       prompt: prompt,
       system: systemPrompt,
       stream: false,
@@ -64,7 +84,8 @@ async function callOllama(prompt, systemPrompt = "You are a helpful assistant.")
 
 async function summarizeWithOllama(text) {
   try {
-    console.log("⚡ Ollama summarization started...");
+    const validText = validateText(text);
+    logger.ollama.start("Ollama summarization");
     const summaryPrompt = `
 You are a summarization assistant.
 Summarize the following text in 5–7 concise bullet points.
@@ -72,7 +93,7 @@ Avoid unnecessary commentary, repetition, or intro phrases like "Here is a summa
 Be objective and clear.
 
 Text:
-${text}
+${validText}
 `;
     const summary = await callOllama(summaryPrompt, "You are a summarization assistant that creates concise bullet-point summaries.");
     const cleanedSummary = summary.replace(/^['\''.\d\-\*\)\s]+/, "").trim();
@@ -85,7 +106,7 @@ that a user might want to ask to understand the topic better.
 Output only the 3 questions as a simple numbered list (no introduction).
 
 Text:
-${text}
+${validText}
 
 Summary:
 ${cleanedSummary}
@@ -104,21 +125,27 @@ ${cleanedSummary}
         )
         .slice(0, 3);
     } catch (e) {
-      console.error("⚠️ Ollama follow-up question generation failed:", e);
+      logger.ollama.warn(`Ollama follow-up question generation failed: ${e.message}`);
       followUps = [];
     }
 
-    console.log("✅ Ollama summarization done.");
+    logger.ollama.complete("Ollama summarization");
     return { summary: cleanedSummary, followUps };
   } catch (err) {
-    console.error("❌ Ollama summarization error:", err);
+    logger.ollama.fail("Ollama summarization", err);
     throw err;
   }
 }
 
 async function qaWithOllama(context, question) {
   try {
-    console.log("💬 Ollama Q&A started...");
+    if (!context || typeof context !== 'string') {
+      throw new Error('Context is required');
+    }
+    if (!question || typeof question !== 'string') {
+      throw new Error('Question is required');
+    }
+    logger.ollama.start("Ollama Q&A");
     const prompt = `
 You are a helpful assistant.
 Use the following context to answer the user's question clearly and concisely.
@@ -132,18 +159,22 @@ Question:
 ${question}
 `;
     const answer = await callOllama(prompt, "You answer questions based on the provided context. Be clear and concise.");
-    console.log("✅ Ollama Q&A done.");
+    logger.ollama.complete("Ollama Q&A");
     return answer.replace(/^['\''.\d\-\*\)\s]+/, "").trim();
   } catch (err) {
-    console.error("❌ Ollama Q&A error:", err);
+    logger.ollama.fail("Ollama Q&A", err);
     throw err;
   }
 }
 
 async function summarizeWithGemini(text) {
+  if (!genAI) {
+    throw new Error('Google API key not configured');
+  }
   try {
-    console.log("⚡ Gemini summarization started...");
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const validText = validateText(text);
+    logger.gemini.start("Gemini summarization");
+    const model = genAI.getGenerativeModel({ model: config.gemini.model });
 
     const summaryPrompt = `
 You are a summarization assistant.
@@ -152,13 +183,13 @@ Avoid unnecessary commentary, repetition, or intro phrases like "Here is a summa
 Be objective and clear.
 
 Text:
-${text}
+${validText}
 `;
 
     const result = await model.generateContent(summaryPrompt);
     const summary = result?.response?.text?.().trim?.() || "No summary generated.";
 
-    console.log("✅ Summary generated.");
+    logger.gemini.info("Summary generated.");
 
     let followUps = [];
     try {
@@ -168,7 +199,7 @@ that a user might want to ask to understand the topic better.
 Output only the 3 questions as a simple numbered list (no introduction).
 
 Text:
-${text}
+${validText}
 
 Summary:
 ${summary}
@@ -190,22 +221,31 @@ ${summary}
         )
         .slice(0, 3);
     } catch (e) {
-      console.error("⚠️ Follow-up question generation failed:", e);
+      logger.gemini.warn(`Follow-up question generation failed: ${e.message}`);
       followUps = [];
     }
 
-    console.log("✅ Follow-up questions generated:", followUps);
+    logger.gemini.debug(`Follow-up questions generated: ${followUps.length}`);
     return { summary, followUps };
   } catch (err) {
-    console.error("❌ Gemini summarization error:", err);
+    logger.gemini.fail("Gemini summarization", err);
     return { summary: "Summarization failed.", followUps: [] };
   }
 }
 
 async function qaWithGemini(context, question) {
+  if (!genAI) {
+    throw new Error('Google API key not configured');
+  }
   try {
-    console.log("💬 Gemini Q&A started...");
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    if (!context || typeof context !== 'string') {
+      throw new Error('Context is required');
+    }
+    if (!question || typeof question !== 'string') {
+      throw new Error('Question is required');
+    }
+    logger.gemini.start("Gemini Q&A");
+    const model = genAI.getGenerativeModel({ model: config.gemini.model });
 
     const prompt = `
 You are a helpful assistant.
@@ -223,10 +263,10 @@ ${question}
     const result = await model.generateContent(prompt);
     const answer = result?.response?.text?.().trim?.() || "No answer generated.";
 
-    console.log("✅ Gemini Q&A done.");
+    logger.gemini.complete("Gemini Q&A");
     return answer;
   } catch (err) {
-    console.error("❌ Gemini Q&A error:", err);
+    logger.gemini.fail("Gemini Q&A", err);
     return "I couldn't generate an answer.";
   }
 }
@@ -255,19 +295,19 @@ async function summarize(text) {
     try {
       return await summarizeWithOllama(text);
     } catch (err) {
-      console.log("⚠️ Ollama failed, falling back to Gemini...");
+      logger.ollama.warn("Ollama failed, falling back to Gemini");
     }
   }
   
-  if (process.env.GOOGLE_API_KEY) {
+  if (config.gemini.apiKey) {
     try {
       return await summarizeWithGemini(text);
     } catch (err) {
-      console.log("⚠️ Gemini failed, falling back to mock mode...");
+      logger.gemini.warn("Gemini failed, falling back to mock mode");
     }
   }
   
-  console.log("📦 Using mock summarization mode.");
+  logger.app.info("Using mock summarization mode");
   return getMockSummary(text);
 }
 
@@ -278,20 +318,31 @@ async function qa(context, question) {
     try {
       return await qaWithOllama(context, question);
     } catch (err) {
-      console.log("⚠️ Ollama failed, falling back to Gemini...");
+      logger.ollama.warn("Ollama failed, falling back to Gemini");
     }
   }
   
-  if (process.env.GOOGLE_API_KEY) {
+  if (config.gemini.apiKey) {
     try {
       return await qaWithGemini(context, question);
     } catch (err) {
-      console.log("⚠️ Gemini failed, falling back to mock mode...");
+      logger.gemini.warn("Gemini failed, falling back to mock mode");
     }
   }
   
-  console.log("📦 Using mock Q&A mode.");
+  logger.app.info("Using mock Q&A mode");
   return getMockAnswer(question);
 }
 
-module.exports = { summarize, qa, summarizeWithGemini, qaWithGemini, summarizeWithOllama, qaWithOllama };
+module.exports = { 
+  summarize, 
+  qa, 
+  summarizeWithGemini, 
+  qaWithGemini, 
+  summarizeWithOllama, 
+  qaWithOllama,
+  checkOllamaAvailable,
+  resetOllamaCache,
+  getMockSummary,
+  getMockAnswer
+};

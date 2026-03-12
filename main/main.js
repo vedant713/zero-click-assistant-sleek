@@ -5,6 +5,7 @@ const { getActiveWindowTitle } = require("./sensors/activeWin");
 const http = require("http");
 require("dotenv").config();
 const { summarize, qa } = require("../shared/summarizer");
+const features = require("../shared/features");
 
 
 let overlay;
@@ -226,6 +227,309 @@ ipcMain.handle("overlay:toggle", () => {
   isVisible = !isVisible;
   isVisible ? overlay.show() : overlay.hide();
   return isVisible;
+});
+
+// IPC: Features - Save Conversations
+ipcMain.handle("features:saveConversation", async (_evt, { conversation, summary }) => {
+  try {
+    return features.saveConversation(conversation, summary);
+  } catch (err) {
+    console.error("Save conversation error:", err);
+    return null;
+  }
+});
+
+ipcMain.handle("features:getSavedConversations", async () => {
+  try {
+    return features.getSavedConversations();
+  } catch (err) {
+    console.error("Get saved conversations error:", err);
+    return [];
+  }
+});
+
+// IPC: Features - Translation
+ipcMain.handle("features:translate", async (_evt, { text, targetLang }) => {
+  try {
+    return await features.translateText(text, targetLang);
+  } catch (err) {
+    console.error("Translation error:", err);
+    return text;
+  }
+});
+
+// IPC: Features - Quick Actions
+ipcMain.handle("features:copyToClipboard", async (_evt, text) => {
+  try {
+    return features.copyToClipboard(text);
+  } catch (err) {
+    console.error("Copy to clipboard error:", err);
+    return false;
+  }
+});
+
+ipcMain.handle("features:clearConversation", async () => {
+  try {
+    return features.clearConversation();
+  } catch (err) {
+    console.error("Clear conversation error:", err);
+    return false;
+  }
+});
+
+// IPC: Features - Text Analysis
+ipcMain.handle("features:analyzeText", async (_evt, text) => {
+  try {
+    return features.analyzeText(text);
+  } catch (err) {
+    console.error("Analyze text error:", err);
+    return null;
+  }
+});
+
+// IPC: Features - Bookmarks
+ipcMain.handle("features:bookmarkConversation", async (_evt, { conversation, summary, label }) => {
+  try {
+    return features.bookmarkConversation(conversation, summary, label);
+  } catch (err) {
+    console.error("Bookmark error:", err);
+    return null;
+  }
+});
+
+ipcMain.handle("features:getBookmarks", async () => {
+  try {
+    return features.getBookmarks();
+  } catch (err) {
+    console.error("Get bookmarks error:", err);
+    return [];
+  }
+});
+
+ipcMain.handle("features:deleteBookmark", async (_evt, id) => {
+  try {
+    return features.deleteBookmark(id);
+  } catch (err) {
+    console.error("Delete bookmark error:", err);
+    return false;
+  }
+});
+
+// IPC: Features - Export
+ipcMain.handle("features:exportMarkdown", async (_evt, { summary, conversation }) => {
+  try {
+    return features.exportAsMarkdown(summary, conversation);
+  } catch (err) {
+    console.error("Export markdown error:", err);
+    return '';
+  }
+});
+
+ipcMain.handle("features:exportText", async (_evt, { summary, conversation }) => {
+  try {
+    return features.exportAsText(summary, conversation);
+  } catch (err) {
+    console.error("Export text error:", err);
+    return '';
+  }
+});
+
+// IPC: Features - Search
+ipcMain.handle("features:search", async (_evt, query) => {
+  try {
+    return features.searchConversations(query);
+  } catch (err) {
+    console.error("Search error:", err);
+    return [];
+  }
+});
+
+// IPC: Features - Providers
+ipcMain.handle("features:getProviders", async () => {
+  try {
+    return features.getAvailableProviders();
+  } catch (err) {
+    console.error("Get providers error:", err);
+    return { ollama: false, gemini: false, mock: false };
+  }
+});
+
+// IPC: Features - Settings
+ipcMain.handle("features:getSettings", async () => {
+  try {
+    return features.getSettings();
+  } catch (err) {
+    console.error("Get settings error:", err);
+    return {};
+  }
+});
+
+ipcMain.handle("features:saveSettings", async (_evt, settings) => {
+  try {
+    return features.saveSettings(settings);
+  } catch (err) {
+    console.error("Save settings error:", err);
+    return false;
+  }
+});
+
+// IPC: Features - History
+ipcMain.handle("features:getHistory", async () => {
+  try {
+    return features.getHistory();
+  } catch (err) {
+    console.error("Get history error:", err);
+    return [];
+  }
+});
+
+ipcMain.handle("features:clearHistory", async () => {
+  try {
+    return features.clearHistory();
+  } catch (err) {
+    console.error("Clear history error:", err);
+    return false;
+  }
+});
+
+// IPC: Analysis
+ipcMain.handle("analyze-text", async (_evt, text) => {
+  try {
+    return features.analyzeText(text);
+  } catch (err) {
+    console.error("Analyze text error:", err);
+    return null;
+  }
+});
+
+// IPC: Bookmarks
+ipcMain.handle("get-bookmarks", async () => {
+  try {
+    return features.getBookmarks();
+  } catch (err) {
+    console.error("Get bookmarks error:", err);
+    return [];
+  }
+});
+
+ipcMain.handle("bookmark-conversation", async (_evt, { summary, conversation, label }) => {
+  try {
+    return features.bookmarkConversation(conversation, summary, label);
+  } catch (err) {
+    console.error("Bookmark error:", err);
+    return null;
+  }
+});
+
+ipcMain.handle("delete-bookmark", async (_evt, id) => {
+  try {
+    return features.deleteBookmark(id);
+  } catch (err) {
+    console.error("Delete bookmark error:", err);
+    return false;
+  }
+});
+
+// IPC: History
+ipcMain.handle("get-history", async () => {
+  try {
+    return features.getHistory();
+  } catch (err) {
+    console.error("Get history error:", err);
+    return [];
+  }
+});
+
+ipcMain.handle("clear-history", async () => {
+  try {
+    return features.clearHistory();
+  } catch (err) {
+    console.error("Clear history error:", err);
+    return false;
+  }
+});
+
+ipcMain.handle("save-conversation", async (_evt, { summary, conversation }) => {
+  try {
+    return features.saveConversation(conversation, summary);
+  } catch (err) {
+    console.error("Save conversation error:", err);
+    return null;
+  }
+});
+
+// IPC: Export
+ipcMain.handle("export-markdown", async (_evt, { summary, conversation }) => {
+  try {
+    return features.exportAsMarkdown(summary, conversation);
+  } catch (err) {
+    console.error("Export markdown error:", err);
+    return '';
+  }
+});
+
+ipcMain.handle("export-text", async (_evt, { summary, conversation }) => {
+  try {
+    return features.exportAsText(summary, conversation);
+  } catch (err) {
+    console.error("Export text error:", err);
+    return '';
+  }
+});
+
+// IPC: Search
+ipcMain.handle("search-history", async (_evt, query) => {
+  try {
+    return features.searchConversations(query);
+  } catch (err) {
+    console.error("Search error:", err);
+    return [];
+  }
+});
+
+// IPC: Provider
+ipcMain.handle("get-provider", async () => {
+  try {
+    const settings = features.getSettings();
+    return settings.provider || 'ollama';
+  } catch (err) {
+    console.error("Get provider error:", err);
+    return 'ollama';
+  }
+});
+
+ipcMain.handle("set-provider", async (_evt, provider) => {
+  try {
+    const settings = features.getSettings();
+    settings.provider = provider;
+    return features.saveSettings(settings);
+  } catch (err) {
+    console.error("Set provider error:", err);
+    return false;
+  }
+});
+
+// IPC: Mock Data
+ipcMain.handle("get-mock-data", async (_evt, type) => {
+  try {
+    const mockData = {
+      conversations: [
+        { id: '1', summary: 'Sample conversation 1', conversation: ['Hello', 'Hi there'], timestamp: Date.now() },
+        { id: '2', summary: 'Sample conversation 2', conversation: ['How are you?', 'I am good'], timestamp: Date.now() }
+      ],
+      bookmarks: [
+        { id: '1', label: 'Important', summary: 'Bookmarked conversation', timestamp: Date.now() }
+      ],
+      history: [
+        { id: '1', summary: 'History item 1', timestamp: Date.now() },
+        { id: '2', summary: 'History item 2', timestamp: Date.now() }
+      ]
+    };
+    return mockData[type] || null;
+  } catch (err) {
+    console.error("Get mock data error:", err);
+    return null;
+  }
 });
 
 app.on("will-quit", () => {

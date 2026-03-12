@@ -1,0 +1,8 @@
+{
+  "theme": "dark",
+  "language": "en",
+  "autoSave": false,
+  "maxHistory": 100,
+  "ollamaModel": "llama3:latest",
+  "geminiModel": "gemini-2.0-flash"
+}
