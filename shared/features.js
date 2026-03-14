@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
+const { config } = require('./config');
 
 // ============ 1. Save Conversations ============
 const VALID_CATEGORIES = ['general', 'work', 'personal', 'research', 'code', 'notes'];
@@ -686,7 +687,6 @@ function searchConversations(query) {
 
 // ============ 8. API Provider Management ============
 function getAvailableProviders() {
-  const { config } = require('./config');
   return {
     ollama: config.ollama.baseUrl ? true : false,
     gemini: config.gemini.apiKey ? true : false,
@@ -695,7 +695,19 @@ function getAvailableProviders() {
 }
 
 // ============ 9. Settings Management ============
+let loadedSettings = null;
+
+function loadSettingsOnInit() {
+  if (!loadedSettings) {
+    loadedSettings = getSettings();
+  }
+  return loadedSettings;
+}
+
 function getSettings() {
+  if (loadedSettings) {
+    return loadedSettings;
+  }
   const dir = getDataDir();
   const settingsFile = path.join(dir, 'settings.json');
   const defaults = getDefaultSettings();
@@ -780,6 +792,7 @@ function saveSettings(settings) {
   const current = getSettings();
   const validated = { ...current, ...settings };
   fs.writeFileSync(settingsFile, JSON.stringify(validated, null, 2));
+  loadedSettings = validated;
   return true;
 }
 
@@ -1005,6 +1018,7 @@ module.exports = {
   saveAdvancedSettings,
   getModelOptions,
   getDefaultSettings,
+  loadSettingsOnInit,
   // 10. History
   getHistory,
   clearHistory,

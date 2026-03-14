@@ -203,6 +203,37 @@ function isValidObject(value) {
 
 let isPaused = false;
 
+async function checkNetworkAvailability() {
+  return new Promise(resolve => {
+    const req = http.get({ hostname: 'localhost', port: 11434, agent: false }, res => {
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => resolve(false));
+    req.setTimeout(3000, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+async function checkGeminiAvailability() {
+  const config = require('../shared/config');
+  return !!config.gemini?.apiKey;
+}
+
+async function getProviderStatus(provider) {
+  if (provider === 'mock') return true;
+  if (provider === 'ollama') return await checkNetworkAvailability();
+  if (provider === 'gemini') return await checkGeminiAvailability();
+  return false;
+}
+
+async function sendProviderStatus(status) {
+  if (overlay && overlay.webContents && !overlay.webContents.isDestroyed()) {
+    overlay.webContents.send('provider-status', status);
+  }
+}
+
 async function detectVitePort() {
   const ports = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180];
   for (const p of ports) {
@@ -236,6 +267,9 @@ async function createOverlay() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
     },
   });
 
@@ -272,22 +306,8 @@ async function createOverlay() {
   });
 }
 
-function createTray() {
-  const iconSize = 16;
-  const icon = nativeImage.createEmpty();
-  const canvas = Buffer.alloc(iconSize * iconSize * 4);
-  for (let i = 0; i < iconSize * iconSize; i++) {
-    canvas[i * 4] = 30;
-    canvas[i * 4 + 1] = 30;
-    canvas[i * 4 + 2] = 46;
-    canvas[i * 4 + 3] = 255;
-  }
-  const trayIcon = nativeImage.createFromBuffer(canvas, { width: iconSize, height: iconSize });
-
-  tray = new Tray(trayIcon);
-  tray.setToolTip('Zero-Click Assistant');
-
-  const contextMenu = Menu.buildFromTemplate([
+function buildTrayMenuTemplate(isPausedVal, alwaysOnTopVal) {
+  return [
     {
       label: 'Show/Hide Overlay',
       click: () => {
@@ -304,9 +324,9 @@ function createTray() {
       },
     },
     {
-      label: isPaused ? 'Resume Monitoring' : 'Pause Monitoring',
+      label: isPausedVal ? 'Resume Monitoring' : 'Pause Monitoring',
       click: () => {
-        if (isPaused) {
+        if (isPausedVal) {
           resume();
           isPaused = false;
         } else {
@@ -317,10 +337,7 @@ function createTray() {
       },
     },
     {
-      label:
-        overlay && !overlay.isDestroyed() && overlay.isAlwaysOnTop()
-          ? 'Disable Always On Top'
-          : 'Enable Always On Top',
+      label: alwaysOnTopVal ? 'Disable Always On Top' : 'Enable Always On Top',
       click: () => {
         if (overlay && !overlay.isDestroyed()) {
           const current = overlay.isAlwaysOnTop();
@@ -337,9 +354,27 @@ function createTray() {
         app.quit();
       },
     },
-  ]);
+  ];
+}
 
-  tray.setContextMenu(contextMenu);
+function createTray() {
+  const iconSize = 16;
+  const icon = nativeImage.createEmpty();
+  const canvas = Buffer.alloc(iconSize * iconSize * 4);
+  for (let i = 0; i < iconSize * iconSize; i++) {
+    canvas[i * 4] = 30;
+    canvas[i * 4 + 1] = 30;
+    canvas[i * 4 + 2] = 46;
+    canvas[i * 4 + 3] = 255;
+  }
+  const trayIcon = nativeImage.createFromBuffer(canvas, { width: iconSize, height: iconSize });
+
+  tray = new Tray(trayIcon);
+  tray.setToolTip('Zero-Click Assistant');
+
+  tray.setContextMenu(
+    Menu.buildFromTemplate(buildTrayMenuTemplate(isPaused, overlay?.isAlwaysOnTop() || false))
+  );
 
   tray.on('double-click', () => {
     if (overlay && !overlay.isDestroyed()) {
@@ -357,64 +392,21 @@ function createTray() {
 
 function updateTrayMenu() {
   if (!tray) return;
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show/Hide Overlay',
-      click: () => {
-        if (overlay && !overlay.isDestroyed()) {
-          if (overlay.isVisible()) {
-            overlay.hide();
-            isVisible = false;
-          } else {
-            overlay.show();
-            overlay.focus();
-            isVisible = true;
-          }
-        }
-      },
-    },
-    {
-      label: isPaused ? 'Resume Monitoring' : 'Pause Monitoring',
-      click: () => {
-        if (isPaused) {
-          resume();
-          isPaused = false;
-        } else {
-          pause();
-          isPaused = true;
-        }
-        updateTrayMenu();
-      },
-    },
-    {
-      label:
-        overlay && !overlay.isDestroyed() && overlay.isAlwaysOnTop()
-          ? 'Disable Always On Top'
-          : 'Enable Always On Top',
-      click: () => {
-        if (overlay && !overlay.isDestroyed()) {
-          const current = overlay.isAlwaysOnTop();
-          overlay.setAlwaysOnTop(!current);
-          updateTrayMenu();
-        }
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-
-  tray.setContextMenu(contextMenu);
+  tray.setContextMenu(
+    Menu.buildFromTemplate(buildTrayMenuTemplate(isPaused, overlay?.isAlwaysOnTop() || false))
+  );
 }
 
 app.whenReady().then(async () => {
   await createOverlay();
   createTray();
+
+  features.loadSettingsOnInit();
+
+  const config = require('../shared/config');
+  const provider = config.defaultProvider || 'ollama';
+  const isOnline = await getProviderStatus(provider);
+  sendProviderStatus(isOnline ? 'online' : 'offline');
 
   registerHotkeys();
 
@@ -446,16 +438,50 @@ app.whenReady().then(async () => {
     }
   });
 
+  ipcMain.handle('settings:export', async () => {
+    try {
+      const settings = features.getSettings();
+      const hotkeys = features.getHotkeys ? features.getHotkeys() : {};
+      return { settings, hotkeys, exportedAt: new Date().toISOString() };
+    } catch (err) {
+      console.error('Export settings error:', err);
+      return null;
+    }
+  });
+
+  ipcMain.handle('settings:import', async (_evt, data) => {
+    try {
+      if (data.settings) {
+        features.saveSettings(data.settings);
+      }
+      if (data.hotkeys && features.saveHotkeys) {
+        features.saveHotkeys(data.hotkeys);
+      }
+      return true;
+    } catch (err) {
+      console.error('Import settings error:', err);
+      return false;
+    }
+  });
+
   watchClipboard(async text => {
     try {
       console.log('Clipboard text:', text.slice(0, 80));
-      const { summary, followUps } = await summarize(text);
+      const MAX_CLIPBOARD_LENGTH = 50000;
+      const textToProcess =
+        text.length > MAX_CLIPBOARD_LENGTH
+          ? text.slice(0, MAX_CLIPBOARD_LENGTH) + '\n\n[Truncated - text exceeded maximum length]'
+          : text;
+      const { summary, followUps } = await summarize(textToProcess);
       if (overlay && overlay.webContents && !overlay.webContents.isDestroyed()) {
         overlay.webContents.send('clipboard-event', text);
         overlay.webContents.send('summary-event', { text, summary, followUps });
       }
     } catch (err) {
       console.error('Summarization error:', err);
+      if (overlay && overlay.webContents && !overlay.webContents.isDestroyed()) {
+        overlay.webContents.send('summary-error', err.message);
+      }
     }
   });
 
@@ -555,20 +581,54 @@ ipcMain.handle('overlay:set-size', async (_evt, payload) => {
 
 ipcMain.handle('summarize', async (_evt, text) => {
   try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+
+    if (!isOnline) {
+      sendProviderStatus('offline');
+      if (overlay && overlay.webContents && !overlay.webContents.isDestroyed()) {
+        overlay.webContents.send('summary-event', {
+          text,
+          summary: '',
+          followUps: [],
+          error: 'AI service is offline. Please check your connection.',
+        });
+      }
+      return {
+        summary: 'AI service is offline. Please check your connection.',
+        followUps: [],
+        error: 'offline',
+      };
+    }
+
+    sendProviderStatus('online');
     const { summary, followUps } = await summarize(text);
     return { summary, followUps };
   } catch (err) {
     console.error('Summarization IPC error:', err);
-    return { summary: 'Summarization failed.', followUps: [] };
+    sendProviderStatus('offline');
+    return { summary: 'Summarization failed.', followUps: [], error: err.message };
   }
 });
 
 ipcMain.handle('qa:ask', async (_evt, { text, question }) => {
   try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+
+    if (!isOnline) {
+      sendProviderStatus('offline');
+      return 'AI service is offline. Please check your connection.';
+    }
+
+    sendProviderStatus('online');
     const answer = await qa(text, question);
     return answer || 'No answer generated.';
   } catch (err) {
     console.error('Q&A error:', err);
+    sendProviderStatus('offline');
     return 'Q&A failed.';
   }
 });
@@ -878,6 +938,18 @@ ipcMain.handle('features:getProviders', async () => {
   } catch (err) {
     console.error('Get providers error:', err);
     return { ollama: false, gemini: false, mock: false };
+  }
+});
+
+ipcMain.handle('features:setProvider', async (_evt, provider) => {
+  try {
+    const isOnline = await getProviderStatus(provider);
+    sendProviderStatus(isOnline ? 'online' : 'offline');
+    features.setProvider(provider);
+    return { success: true, provider, isOnline };
+  } catch (err) {
+    console.error('Set provider error:', err);
+    return { error: err.message };
   }
 });
 

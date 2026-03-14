@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Features - Providers
   getProviders: () => ipcRenderer.invoke('features:getProviders'),
+  setProvider: provider => ipcRenderer.invoke('features:setProvider', provider),
+  onProviderStatus: cb => ipcRenderer.on('provider-status', (_, status) => cb(status)),
 
   // Features - Settings
   getSettings: () => ipcRenderer.invoke('features:getSettings'),
@@ -76,6 +78,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Hotkeys
   getHotkeys: () => ipcRenderer.invoke('hotkeys:get'),
   saveHotkeys: hotkeys => ipcRenderer.invoke('hotkeys:save', hotkeys),
+  exportSettings: () => ipcRenderer.invoke('settings:export'),
+  importSettings: data => ipcRenderer.invoke('settings:import', data),
 
   // Clipboard Control
   clipboardSetDebounce: debounceTime => ipcRenderer.invoke('clipboard:setDebounce', debounceTime),

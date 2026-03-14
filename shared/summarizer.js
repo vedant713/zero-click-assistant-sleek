@@ -30,39 +30,98 @@ async function checkOllamaAvailable() {
   if (ollamaAvailable !== null) {
     return ollamaAvailable;
   }
+
+  let settings;
   try {
-    const ollamaUrl = new URL(config.ollama.baseUrl);
-    const response = await new Promise((resolve, reject) => {
-      const req = http.request(
-        {
-          hostname: ollamaUrl.hostname,
-          port: ollamaUrl.port || 11434,
-          path: '/api/tags',
-          method: 'GET',
-          timeout: 3000,
-        },
-        res => {
-          let data = '';
-          res.on('data', chunk => (data += chunk));
-          res.on('end', () => resolve({ statusCode: res.statusCode, body: data }));
-        }
-      );
-      req.on('error', reject);
-      req.on('timeout', () => reject(new Error('Request timeout')));
-      req.end();
-    });
-    ollamaAvailable = response.statusCode === 200;
-    if (ollamaAvailable) {
-      logger.ollama.complete('Ollama is available');
-    } else {
-      logger.ollama.warn(`Ollama responded with status: ${response.statusCode}`);
-    }
-    return ollamaAvailable;
-  } catch (err) {
-    logger.ollama.warn(`Ollama not available: ${err.message}`);
-    ollamaAvailable = false;
-    return false;
+    settings = features.getSettings();
+  } catch (e) {
+    settings = {};
   }
+  const targetModel = settings?.ollamaModel || config.ollama.model;
+
+  const maxRetries = 2;
+  const baseTimeout = 10000;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const ollamaUrl = new URL(config.ollama.baseUrl);
+      const timeout = baseTimeout * Math.pow(2, attempt);
+      const fullUrl = `http://${ollamaUrl.hostname}:${ollamaUrl.port || 11434}/api/tags`;
+      logger.ollama.info(
+        `Checking Ollama availability (attempt ${attempt + 1}): ${fullUrl}, model: ${targetModel}`
+      );
+      const response = await new Promise((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: ollamaUrl.hostname,
+            port: ollamaUrl.port || 11434,
+            path: '/api/tags',
+            method: 'GET',
+            timeout: timeout,
+            agent: false,
+          },
+          res => {
+            let data = '';
+            res.on('data', chunk => (data += chunk));
+            res.on('end', () => resolve({ statusCode: res.statusCode, body: data }));
+          }
+        );
+        req.on('error', err => {
+          const errMsg = err.message || String(err);
+          const errCode = err.code || 'unknown';
+          logger.ollama.warn(
+            `Ollama request error (attempt ${attempt + 1}): ${fullUrl} - ${errCode}: ${errMsg}`
+          );
+          reject(err);
+        });
+        req.on('timeout', () => reject(new Error('Request timeout')));
+        req.end();
+      });
+
+      if (response.statusCode !== 200) {
+        ollamaAvailable = false;
+        logger.ollama.warn(`Ollama responded with status: ${response.statusCode}`);
+        return ollamaAvailable;
+      }
+
+      try {
+        const parsed = JSON.parse(response.body);
+        const availableModels = parsed.models || [];
+        const modelNames = availableModels.map(m => m.name);
+        const modelExists = modelNames.some(
+          name => name === targetModel || name.startsWith(targetModel.replace(/:.*$/, ''))
+        );
+
+        if (!modelExists) {
+          ollamaAvailable = false;
+          logger.ollama.warn(
+            `Model '${targetModel}' not found. Available: ${modelNames.join(', ')}`
+          );
+          return ollamaAvailable;
+        }
+
+        ollamaAvailable = true;
+        logger.ollama.complete(`Ollama is available with model '${targetModel}'`);
+        return ollamaAvailable;
+      } catch (parseErr) {
+        logger.ollama.warn(`Failed to parse Ollama /api/tags response: ${parseErr.message}`);
+        ollamaAvailable = false;
+        return false;
+      }
+    } catch (err) {
+      const errMsg = err.message || String(err);
+      const errCode = err.code || 'unknown';
+      logger.ollama.warn(
+        `Ollama availability check attempt ${attempt + 1} failed: ${fullUrl} - ${errCode}: ${errMsg}`
+      );
+      if (attempt === maxRetries) {
+        ollamaAvailable = false;
+        return false;
+      }
+      await new Promise(resolve => setTimeout(resolve, baseTimeout * Math.pow(2, attempt)));
+    }
+  }
+  return false;
 }
 
 async function callOllama(prompt, systemPrompt = 'You are a helpful assistant.') {
@@ -73,22 +132,39 @@ async function callOllama(prompt, systemPrompt = 'You are a helpful assistant.')
     settings = {};
   }
   const model = settings?.ollamaModel || config.ollama.model;
+  const timeoutMs = config.ollama.timeout || 60000;
 
-  const response = await fetch(`${config.ollama.baseUrl}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: model,
-      prompt: prompt,
-      system: systemPrompt,
-      stream: false,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${config.ollama.baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json();
+    return data.message.content;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error(`Ollama request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
   }
-  const data = await response.json();
-  return data.response;
 }
 
 async function summarizeWithOllama(text) {
@@ -205,7 +281,7 @@ ${validText}
 `;
 
     const result = await model.generateContent(summaryPrompt);
-    const summary = result?.response?.text?.().trim?.() || 'No summary generated.';
+    const summary = result?.response?.text()?.trim() || 'No summary generated.';
 
     logger.gemini.info('Summary generated.');
 
@@ -224,7 +300,7 @@ ${summary}
 `;
 
       const qResult = await model.generateContent(followPrompt);
-      const rawText = qResult?.response?.text?.().trim?.() || '';
+      const rawText = qResult?.response?.text()?.trim() || '';
 
       followUps = rawText
         .split('\n')
@@ -279,7 +355,7 @@ ${question}
 `;
 
     const result = await model.generateContent(prompt);
-    const answer = result?.response?.text?.().trim?.() || 'No answer generated.';
+    const answer = result?.response?.text()?.trim() || 'No answer generated.';
 
     logger.gemini.complete('Gemini Q&A');
     return answer;

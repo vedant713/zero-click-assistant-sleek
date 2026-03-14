@@ -1,0 +1,18 @@
+{
+  "toggle": "CommandOrControl+Alt+O",
+  "resetPosition": "CommandOrControl+Alt+R",
+  "moveUp": "CommandOrControl+Alt+Up",
+  "moveDown": "CommandOrControl+Alt+Down",
+  "moveLeft": "CommandOrControl+Alt+Left",
+  "moveRight": "CommandOrControl+Alt+Right",
+  "quit": "CommandOrControl+Alt+X",
+  "snapTopLeft": "CommandOrControl+Alt+1",
+  "snapTopCenter": "CommandOrControl+Alt+2",
+  "snapTopRight": "CommandOrControl+Alt+3",
+  "snapBottomLeft": "CommandOrControl+Alt+4",
+  "snapBottomCenter": "CommandOrControl+Alt+5",
+  "snapBottomRight": "CommandOrControl+Alt+6",
+  "snapCenter": "CommandOrControl+Alt+7",
+  "snapReset": "CommandOrControl+Alt+0",
+  "commandPalette": "CommandOrControl+K"
+}
