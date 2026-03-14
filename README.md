@@ -1,11 +1,33 @@
 # Zero-Click Assistant - Sleek
 
+![Test Features Branch](https://img.shields.io/badge/Branch-test--features-orange?style=flat-square)
+
 A modern, transparent AI assistant overlay for Windows that monitors your clipboard and provides instant AI-powered summarization and Q&A capabilities using Google Gemini AI.
 
 ![Zero-Click Assistant](https://img.shields.io/badge/Zero--Click-Assistant-blue?style=flat-square)
 ![Electron](https://img.shields.io/badge/Electron-47848F?style=flat-square&logo=electron)
 ![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite)
+
+## ⚠️ Test Features Branch
+
+This branch (`test-features`) contains experimental testing features and new UI enhancements under development.
+
+### What's New
+
+- Unit tests for core features
+- Component tests for React UI
+- Error boundary improvements
+- Toast notification system
+- Enhanced accessibility support
+
+### Try It Out
+
+Test the new features by running:
+
+```bash
+npm test
+```
 
 ## ✨ Features
 
