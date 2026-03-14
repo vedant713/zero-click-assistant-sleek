@@ -20,7 +20,11 @@ A modern, transparent AI assistant overlay for Windows that monitors your clipbo
 - **Conversation Management** - Save, tag, categorize, and search conversations
 - **Bookmark Folders** - Organize bookmarks into folders with notes
 - **Multiple Export Formats** - Export as JSON, HTML, Markdown, or plain text
-- **Customizable Settings** - Theme, AI models, clipboard monitoring, and more
+- **Customizable Settings** - Theme, AI models, clipboard monitoring, import/export, and more
+- **Error Boundary** - Graceful error handling with reload option
+- **Toast Notifications** - Non-intrusive system feedback
+- **Settings Import/Export** - Backup and restore settings
+- **Accessibility** - High contrast mode and reduced motion support
 - **Minimal Footprint** - Lightweight and resource-efficient
 
 ## 🚀 Quick Start
@@ -57,37 +61,56 @@ npm start
 ```
 
 Or use the provided batch files:
+
 - `run.bat` - Start the application
 - `run-dev.bat` - Run in development mode
+
+## 🧪 Testing
+
+```bash
+# Run tests
+npm test
+
+# Run tests with coverage
+npm test -- --coverage
+
+# Run tests in watch mode
+npm test -- --watch
+```
+
+The project uses Vitest with React Testing Library for unit and component testing.
 
 ## ⌨️ Keyboard Shortcuts
 
 ### Main Controls
-| Shortcut | Action |
-|----------|--------|
+
+| Shortcut     | Action                    |
+| ------------ | ------------------------- |
 | `Ctrl+Alt+O` | Toggle overlay visibility |
-| `Ctrl+Alt+R` | Reset overlay to center |
-| `Ctrl+Alt+X` | Quit application |
-| `Ctrl+K` | Open command palette |
+| `Ctrl+Alt+R` | Reset overlay to center   |
+| `Ctrl+Alt+X` | Quit application          |
+| `Ctrl+K`     | Open command palette      |
 
 ### Window Positioning
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Alt+1` | Snap to top-left |
-| `Ctrl+Alt+2` | Snap to top-center |
-| `Ctrl+Alt+3` | Snap to top-right |
-| `Ctrl+Alt+4` | Snap to bottom-left |
+
+| Shortcut     | Action                |
+| ------------ | --------------------- |
+| `Ctrl+Alt+1` | Snap to top-left      |
+| `Ctrl+Alt+2` | Snap to top-center    |
+| `Ctrl+Alt+3` | Snap to top-right     |
+| `Ctrl+Alt+4` | Snap to bottom-left   |
 | `Ctrl+Alt+5` | Snap to bottom-center |
-| `Ctrl+Alt+6` | Snap to bottom-right |
-| `Ctrl+Alt+7` | Snap to center |
-| `Ctrl+Alt+0` | Reset snap position |
+| `Ctrl+Alt+6` | Snap to bottom-right  |
+| `Ctrl+Alt+7` | Snap to center        |
+| `Ctrl+Alt+0` | Reset snap position   |
 
 ### Movement
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Alt+↑` | Move up |
-| `Ctrl+Alt+↓` | Move down |
-| `Ctrl+Alt+←` | Move left |
+
+| Shortcut     | Action     |
+| ------------ | ---------- |
+| `Ctrl+Alt+↑` | Move up    |
+| `Ctrl+Alt+↓` | Move down  |
+| `Ctrl+Alt+←` | Move left  |
 | `Ctrl+Alt+→` | Move right |
 
 ## 🗂️ Conversation Management
@@ -126,15 +149,15 @@ USE_OLLAMA=false
 
 ### Settings (in-app)
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Theme | dark | dark/light mode |
-| AI Model | gemini-2.0-flash | Select Gemini or Ollama model |
-| Temperature | 0.7 | AI creativity (0.0-1.0) |
-| Max Tokens | 1024 | Response length limit |
-| Clipboard Debounce | 1500ms | Delay before processing |
-| Window Opacity | 1.0 | Overlay transparency |
-| Always on Top | true | Keep overlay above other windows |
+| Setting            | Default          | Description                      |
+| ------------------ | ---------------- | -------------------------------- |
+| Theme              | dark             | dark/light mode                  |
+| AI Model           | gemini-2.0-flash | Select Gemini or Ollama model    |
+| Temperature        | 0.7              | AI creativity (0.0-1.0)          |
+| Max Tokens         | 1024             | Response length limit            |
+| Clipboard Debounce | 1500ms           | Delay before processing          |
+| Window Opacity     | 1.0              | Overlay transparency             |
+| Always on Top      | true             | Keep overlay above other windows |
 
 ## 📁 Project Structure
 
@@ -161,7 +184,7 @@ zero-click-assistant-overlay/
 ## 🛠️ Tech Stack
 
 - **Electron** - Desktop application framework
-- **React 18** - UI library
+- **React 19** - UI library
 - **Vite** - Build tool
 - **Google Gemini AI** - AI summarization (also supports Ollama)
 
