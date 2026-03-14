@@ -2,6 +2,38 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 
+const LinkRenderer = ({ href, children }) => {
+  const handleClick = e => {
+    e.preventDefault();
+    if (href) {
+      if (window.electronAPI?.shellOpenExternal) {
+        window.electronAPI.shellOpenExternal(href);
+      } else if (window.open) {
+        window.open(href, '_blank');
+      }
+    }
+  };
+
+  return (
+    <a
+      href={href}
+      onClick={handleClick}
+      type="button"
+      style={{
+        color: '#818cf8',
+        cursor: 'pointer',
+        textDecoration: 'underline',
+      }}
+    >
+      {children}
+    </a>
+  );
+};
+
+const markdownComponents = {
+  a: LinkRenderer,
+};
+
 const getSummaryPanelStyles = theme => {
   const t =
     theme === 'light'
@@ -102,6 +134,16 @@ const getSummaryPanelStyles = theme => {
       borderRadius: 10,
       padding: 10,
     },
+    bookmarkBtn: {
+      background: 'transparent',
+      border: 'none',
+      cursor: 'pointer',
+      fontSize: '1rem',
+      padding: '2px 6px',
+      borderRadius: 4,
+      transition: 'all 0.2s ease',
+      opacity: 0.6,
+    },
     emptyState: {
       textAlign: 'center',
       padding: '20px 12px',
@@ -127,6 +169,8 @@ export default function SummaryPanel({
   reducedMotion = false,
   answerLoading = false,
   answer = '',
+  conversation = [],
+  onBookmark,
 }) {
   const styles = getSummaryPanelStyles(theme);
 
@@ -202,16 +246,41 @@ export default function SummaryPanel({
         >
           <div
             style={{
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              color: '#c4b5fd',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               marginBottom: 8,
             }}
           >
-            📋 Summary
+            <div
+              style={{
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                color: '#c4b5fd',
+              }}
+            >
+              📋 Summary
+            </div>
+            {summary && onBookmark && (
+              <button
+                onClick={() => onBookmark(summary, conversation)}
+                style={styles.bookmarkBtn}
+                onMouseEnter={e => {
+                  e.target.style.opacity = '1';
+                  e.target.style.transform = 'scale(1.1)';
+                }}
+                onMouseLeave={e => {
+                  e.target.style.opacity = '0.6';
+                  e.target.style.transform = 'scale(1)';
+                }}
+                title="Bookmark this summary"
+              >
+                ⭐
+              </button>
+            )}
           </div>
           <div style={styles.summaryText}>
-            <ReactMarkdown>{summary}</ReactMarkdown>
+            <ReactMarkdown components={markdownComponents}>{summary}</ReactMarkdown>
           </div>
 
           {followUps && followUps.length > 0 && (
@@ -261,7 +330,7 @@ export default function SummaryPanel({
               >
                 💬 Answer
               </div>
-              <ReactMarkdown>{answer}</ReactMarkdown>
+              <ReactMarkdown components={markdownComponents}>{answer}</ReactMarkdown>
             </motion.div>
           )}
         </motion.div>

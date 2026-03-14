@@ -733,6 +733,9 @@ function getDefaultSettings() {
     windowOpacity: 1.0,
     alwaysOnTop: true,
     autoStart: false,
+    provider: 'ollama',
+    reducedMotion: false,
+    highContrast: false,
   };
 }
 
@@ -750,6 +753,9 @@ const SETTINGS_SCHEMA = {
   language: { type: 'string' },
   autoSave: { type: 'boolean' },
   maxHistory: { type: 'number', min: 10, max: 1000 },
+  provider: { type: 'string', values: ['ollama', 'gemini', 'mock'] },
+  reducedMotion: { type: 'boolean' },
+  highContrast: { type: 'boolean' },
 };
 
 function validateSetting(key, value) {

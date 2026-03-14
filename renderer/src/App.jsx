@@ -520,7 +520,6 @@ export default function App() {
   }, [mode]);
 
   useEffect(() => {
-    setClipboardText('');
     setSummary('');
     setQuestion('');
     setAnswer('');
@@ -627,6 +626,17 @@ export default function App() {
     }
   };
 
+  const handleBookmark = async (summaryText, conversationData) => {
+    try {
+      const label = `Summary - ${new Date().toLocaleDateString()}`;
+      await window.electronAPI.bookmarkConversation(conversationData, summaryText, label);
+      showToast('Bookmark saved!', 'success');
+    } catch (err) {
+      console.error('Failed to save bookmark:', err);
+      showToast('Failed to save bookmark', 'error');
+    }
+  };
+
   return (
     <ErrorBoundary>
       <AnimatePresence reducedMotion={reducedMotion}>
@@ -688,7 +698,7 @@ export default function App() {
             ) : (
               <>
                 <AnalysisPanel
-                  analysis={analysis}
+                  clipboardText={clipboardText}
                   activePanel={activePanel}
                   reducedMotion={reducedMotion}
                   onClose={() => setActivePanel(null)}
@@ -721,6 +731,8 @@ export default function App() {
                       reducedMotion={reducedMotion}
                       answerLoading={answerLoading}
                       answer={answer}
+                      conversation={conversation}
+                      onBookmark={handleBookmark}
                     />
 
                     {conversation.map((item, idx) => (
@@ -751,6 +763,7 @@ export default function App() {
 
                 {mode === 'qa' && (
                   <QAPanel
+                    clipboardText={clipboardText}
                     question={question}
                     setQuestion={setQuestion}
                     answer={answer}

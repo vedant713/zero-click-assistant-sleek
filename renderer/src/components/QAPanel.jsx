@@ -66,6 +66,7 @@ const getQAPanelStyles = theme => {
 };
 
 export default function QAPanel({
+  clipboardText,
   question,
   setQuestion,
   answer,
@@ -86,6 +87,44 @@ export default function QAPanel({
 
   return (
     <>
+      {clipboardText ? (
+        <div
+          style={{
+            padding: 10,
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 8,
+            marginBottom: 10,
+            maxHeight: 60,
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>
+            📋 Analyzing:
+          </div>
+          <div
+            style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace' }}
+          >
+            {clipboardText.substring(0, 150)}
+            {clipboardText.length > 150 ? '...' : ''}
+          </div>
+        </div>
+      ) : (
+        <div
+          style={{
+            padding: 16,
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 8,
+            marginBottom: 10,
+            textAlign: 'center',
+            color: 'rgba(255,255,255,0.5)',
+            fontSize: '0.8rem',
+          }}
+        >
+          📋 No text to ask about. Copy some text first.
+        </div>
+      )}
       <div style={styles.inputWrapper}>
         <input
           type="text"
