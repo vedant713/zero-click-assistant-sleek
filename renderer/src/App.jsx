@@ -20,6 +20,8 @@ function debounce(func, wait) {
 import Header from './components/Header';
 import SummaryPanel from './components/SummaryPanel';
 import QAPanel from './components/QAPanel';
+import ModePanel from './components/ModePanel';
+import SmartModePanel from './components/SmartModePanel';
 import SettingsPanel from './components/SettingsPanel';
 import CommandPalette from './components/CommandPalette';
 import ToastContainer from './components/ToastContainer';
@@ -210,6 +212,9 @@ export default function App() {
   const [summary, setSummary] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('summarize');
+  const [modeResult, setModeResult] = useState('');
+  const [modeLoading, setModeLoading] = useState(false);
+  const [modeError, setModeError] = useState('');
   const [followUps, setFollowUps] = useState([]);
   const [conversation, setConversation] = useState([]);
   const [question, setQuestion] = useState('');
@@ -230,6 +235,15 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [hotkeys, setHotkeys] = useState({});
   const [editingHotkey, setEditingHotkey] = useState(null);
+
+  // Smart features state
+  const [smartResult, setSmartResult] = useState('');
+  const [smartLoading, setSmartLoading] = useState(false);
+  const [smartError, setSmartError] = useState('');
+  const [suggestedActions, setSuggestedActions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [detectedContentType, setDetectedContentType] = useState('');
+  const [userPreferences, setUserPreferences] = useState({});
 
   const toastTimeoutsRef = useRef([]);
 
@@ -348,6 +362,25 @@ export default function App() {
       action: () => {
         window.electronAPI.quit();
       },
+    },
+    { id: 'smart', label: '✨ Smart Process', icon: '✨', action: () => setMode('smart') },
+    { id: 'translate', label: 'Translate', icon: '🌐', action: () => setMode('translate') },
+    { id: 'explainCode', label: 'Explain Code', icon: '💻', action: () => setMode('explainCode') },
+    { id: 'fixGrammar', label: 'Fix Grammar', icon: '✏️', action: () => setMode('fixGrammar') },
+    {
+      id: 'sentiment',
+      label: 'Sentiment Analysis',
+      icon: '😊',
+      action: () => setMode('sentiment'),
+    },
+    { id: 'keywords', label: 'Extract Keywords', icon: '🔑', action: () => setMode('keywords') },
+    { id: 'reply', label: 'Quick Reply', icon: '💬', action: () => setMode('reply') },
+    { id: 'title', label: 'Generate Title', icon: '📝', action: () => setMode('title') },
+    {
+      id: 'meetingNotes',
+      label: 'Meeting Notes',
+      icon: '📋',
+      action: () => setMode('meetingNotes'),
     },
   ];
 
@@ -577,6 +610,12 @@ export default function App() {
         e.preventDefault();
         filteredCommands[selectedCommandIndex]?.action();
       }
+      // Ctrl+Enter - Smart auto-process
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        handleSmartProcess();
+        return;
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -595,6 +634,193 @@ export default function App() {
       showToast('Something went wrong', 'error');
     } finally {
       setAnswerLoading(false);
+    }
+  };
+
+  const handleModeAction = async (modeType, language = 'Spanish') => {
+    if (!clipboardText || clipboardText.trim().length === 0) {
+      setModeError('No clipboard text available');
+      return;
+    }
+    setModeLoading(true);
+    setModeError('');
+    setModeResult('');
+
+    try {
+      let result;
+      switch (modeType) {
+        case 'translate':
+          result = await window.electronAPI.modeTranslate(clipboardText, language);
+          setModeResult(result.result);
+          break;
+        case 'explainCode':
+          result = await window.electronAPI.modeExplainCode(clipboardText);
+          setModeResult(result.result);
+          break;
+        case 'fixGrammar':
+          result = await window.electronAPI.modeFixGrammar(clipboardText);
+          setModeResult(result.result);
+          break;
+        case 'sentiment':
+          result = await window.electronAPI.modeSentiment(clipboardText);
+          setModeResult(
+            result.sentiment
+              ? `Sentiment: ${result.sentiment}\n\n${result.explanation}`
+              : result.result
+          );
+          break;
+        case 'keywords':
+          result = await window.electronAPI.modeKeywords(clipboardText);
+          setModeResult(result.keywords ? result.keywords.join(', ') : result.result);
+          break;
+        case 'reply':
+          result = await window.electronAPI.modeReply(clipboardText);
+          setModeResult(result.result);
+          break;
+        case 'title':
+          result = await window.electronAPI.modeTitle(clipboardText);
+          setModeResult(result.result);
+          break;
+        case 'meetingNotes':
+          result = await window.electronAPI.modeMeetingNotes(clipboardText);
+          setModeResult(result.result);
+          break;
+        default:
+          setModeError('Unknown mode');
+      }
+    } catch (err) {
+      setModeError(err.message || 'Operation failed');
+    } finally {
+      setModeLoading(false);
+    }
+  };
+
+  // Smart Mode - Auto process clipboard content
+  const handleSmartProcess = async () => {
+    if (!clipboardText || clipboardText.trim().length === 0) {
+      setSmartError('No clipboard text available');
+      return;
+    }
+    setSmartLoading(true);
+    setSmartError('');
+    setSmartResult('');
+    try {
+      const result = await window.electronAPI.smartProcess(clipboardText);
+      if (result.error) {
+        setSmartError(result.error);
+      } else {
+        setSmartResult(result.result);
+        // Show toast for successful processing
+        showToast('✨ Smart processing complete!', 'success');
+      }
+    } catch (err) {
+      setSmartError(err.message || 'Smart processing failed');
+    } finally {
+      setSmartLoading(false);
+    }
+  };
+
+  // Get suggested actions when clipboard changes
+  useEffect(() => {
+    const getSuggestions = async () => {
+      if (!clipboardText || clipboardText.length < 20) {
+        setSuggestedActions([]);
+        setDetectedContentType('');
+        return;
+      }
+      try {
+        const [contentType, actions, prefs] = await Promise.all([
+          window.electronAPI.smartDetectContent(clipboardText),
+          window.electronAPI.smartGetSuggestedActions(clipboardText),
+          window.electronAPI.smartGetPreferences(),
+        ]);
+        setDetectedContentType(contentType.type);
+        setSuggestedActions(actions.slice(0, 3));
+        setUserPreferences(prefs);
+
+        // Show smart suggestion toast if high confidence
+        if (actions.length > 0 && actions[0].confidence > 0.7) {
+          const intentLabels = {
+            summarize: 'Summarize',
+            explainCode: 'Explain Code',
+            meetingNotes: 'Meeting Notes',
+            fixGrammar: 'Fix Grammar',
+            sentiment: 'Sentiment Analysis',
+            keywords: 'Extract Keywords',
+            reply: 'Quick Reply',
+            title: 'Generate Title',
+          };
+          showToast(
+            `💡 Detected: ${intentLabels[actions[0].action] || actions[0].action} - Press Ctrl+Enter to auto-process`,
+            'info',
+            5000
+          );
+        }
+      } catch (err) {
+        console.error('Failed to get suggestions:', err);
+      }
+    };
+
+    const debounceTimer = setTimeout(getSuggestions, 1000);
+    return () => clearTimeout(debounceTimer);
+  }, [clipboardText]);
+
+  // Quick action handler
+  const handleQuickAction = async action => {
+    if (!clipboardText) return;
+    setModeLoading(true);
+    setModeError('');
+    setModeResult('');
+    try {
+      let result;
+      switch (action) {
+        case 'summarize':
+          result = await window.electronAPI.summarize(clipboardText);
+          setModeResult(result.summary);
+          break;
+        case 'explainCode':
+          result = await window.electronAPI.modeExplainCode(clipboardText);
+          setModeResult(result.result);
+          break;
+        case 'meetingNotes':
+          result = await window.electronAPI.modeMeetingNotes(clipboardText);
+          setModeResult(result.result);
+          break;
+        case 'fixGrammar':
+          result = await window.electronAPI.modeFixGrammar(clipboardText);
+          setModeResult(result.result);
+          break;
+        case 'sentiment':
+          result = await window.electronAPI.modeSentiment(clipboardText);
+          setModeResult(
+            result.sentiment
+              ? `Sentiment: ${result.sentiment}\n\n${result.explanation}`
+              : result.result
+          );
+          break;
+        case 'keywords':
+          result = await window.electronAPI.modeKeywords(clipboardText);
+          setModeResult(result.keywords ? result.keywords.join(', ') : result.result);
+          break;
+        case 'reply':
+          result = await window.electronAPI.modeReply(clipboardText);
+          setModeResult(result.result);
+          break;
+        case 'title':
+          result = await window.electronAPI.modeTitle(clipboardText);
+          setModeResult(result.result);
+          break;
+        default:
+          setModeError('Unknown action');
+      }
+      // Save user preference for context learning
+      if (detectedContentType && window.electronAPI?.smartSavePreference) {
+        await window.electronAPI.smartSavePreference(detectedContentType, action);
+      }
+    } catch (err) {
+      setModeError(err.message || 'Action failed');
+    } finally {
+      setModeLoading(false);
     }
   };
 
@@ -770,6 +996,135 @@ export default function App() {
                     answerLoading={answerLoading}
                     qaError={qaError}
                     onAsk={handleAsk}
+                    theme={theme}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+
+                {mode === 'translate' && (
+                  <ModePanel
+                    mode="translate"
+                    title="🌐 Translate"
+                    icon="🌐"
+                    clipboardText={clipboardText}
+                    result={modeResult}
+                    loading={modeLoading}
+                    error={modeError}
+                    onAction={lang => handleModeAction('translate', lang)}
+                    targetLanguage="Spanish"
+                    setTargetLanguage={lang => {}}
+                    theme={theme}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+                {mode === 'explainCode' && (
+                  <ModePanel
+                    mode="explainCode"
+                    title="💻 Explain Code"
+                    icon="💻"
+                    clipboardText={clipboardText}
+                    result={modeResult}
+                    loading={modeLoading}
+                    error={modeError}
+                    onAction={() => handleModeAction('explainCode')}
+                    theme={theme}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+                {mode === 'fixGrammar' && (
+                  <ModePanel
+                    mode="fixGrammar"
+                    title="✏️ Fix Grammar"
+                    icon="✏️"
+                    clipboardText={clipboardText}
+                    result={modeResult}
+                    loading={modeLoading}
+                    error={modeError}
+                    onAction={() => handleModeAction('fixGrammar')}
+                    theme={theme}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+                {mode === 'sentiment' && (
+                  <ModePanel
+                    mode="sentiment"
+                    title="😊 Sentiment Analysis"
+                    icon="😊"
+                    clipboardText={clipboardText}
+                    result={modeResult}
+                    loading={modeLoading}
+                    error={modeError}
+                    onAction={() => handleModeAction('sentiment')}
+                    theme={theme}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+                {mode === 'keywords' && (
+                  <ModePanel
+                    mode="keywords"
+                    title="🔑 Extract Keywords"
+                    icon="🔑"
+                    clipboardText={clipboardText}
+                    result={modeResult}
+                    loading={modeLoading}
+                    error={modeError}
+                    onAction={() => handleModeAction('keywords')}
+                    theme={theme}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+                {mode === 'reply' && (
+                  <ModePanel
+                    mode="reply"
+                    title="💬 Quick Reply"
+                    icon="💬"
+                    clipboardText={clipboardText}
+                    result={modeResult}
+                    loading={modeLoading}
+                    error={modeError}
+                    onAction={() => handleModeAction('reply')}
+                    theme={theme}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+                {mode === 'title' && (
+                  <ModePanel
+                    mode="title"
+                    title="📝 Generate Title"
+                    icon="📝"
+                    clipboardText={clipboardText}
+                    result={modeResult}
+                    loading={modeLoading}
+                    error={modeError}
+                    onAction={() => handleModeAction('title')}
+                    theme={theme}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+                {mode === 'meetingNotes' && (
+                  <ModePanel
+                    mode="meetingNotes"
+                    title="📋 Meeting Notes"
+                    icon="📋"
+                    clipboardText={clipboardText}
+                    result={modeResult}
+                    loading={modeLoading}
+                    error={modeError}
+                    onAction={() => handleModeAction('meetingNotes')}
+                    theme={theme}
+                    reducedMotion={reducedMotion}
+                  />
+                )}
+                {mode === 'smart' && (
+                  <SmartModePanel
+                    clipboardText={clipboardText}
+                    result={smartResult}
+                    loading={smartLoading}
+                    error={smartError}
+                    onSmartProcess={handleSmartProcess}
+                    detectedContentType={detectedContentType}
+                    suggestedActions={suggestedActions}
+                    onQuickAction={handleQuickAction}
                     theme={theme}
                     reducedMotion={reducedMotion}
                   />

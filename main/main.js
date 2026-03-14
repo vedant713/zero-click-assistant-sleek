@@ -13,7 +13,26 @@ const { getActiveWindowTitle } = require('./sensors/activeWin');
 const http = require('http');
 const fs = require('fs');
 require('dotenv').config();
-const { summarize, qa } = require('../shared/summarizer');
+const {
+  summarize,
+  qa,
+  translate,
+  explainCode,
+  fixGrammar,
+  analyzeSentiment,
+  extractKeywords,
+  generateReply,
+  generateTitle,
+  meetingNotes,
+} = require('../shared/summarizer');
+const {
+  detectContentType,
+  detectIntent,
+  getSuggestedActions,
+  smartProcess,
+  saveUserPreference,
+  getUserPreferences,
+} = require('../shared/smartDetector');
 const features = require('../shared/features');
 
 const DEFAULT_HOTKEYS = {
@@ -630,6 +649,182 @@ ipcMain.handle('qa:ask', async (_evt, { text, question }) => {
     console.error('Q&A error:', err);
     sendProviderStatus('offline');
     return 'Q&A failed.';
+  }
+});
+
+ipcMain.handle('mode:translate', async (_evt, { text, targetLanguage }) => {
+  try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+    if (!isOnline) return { result: 'AI service is offline.', error: 'offline' };
+    const result = await translate(text, targetLanguage);
+    return { result };
+  } catch (err) {
+    return { result: 'Translation failed.', error: err.message };
+  }
+});
+
+ipcMain.handle('mode:explainCode', async (_evt, code) => {
+  try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+    if (!isOnline) return { result: 'AI service is offline.', error: 'offline' };
+    const result = await explainCode(code);
+    return { result };
+  } catch (err) {
+    return { result: 'Code explanation failed.', error: err.message };
+  }
+});
+
+ipcMain.handle('mode:fixGrammar', async (_evt, text) => {
+  try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+    if (!isOnline) return { result: 'AI service is offline.', error: 'offline' };
+    const result = await fixGrammar(text);
+    return { result };
+  } catch (err) {
+    return { result: 'Grammar fix failed.', error: err.message };
+  }
+});
+
+ipcMain.handle('mode:sentiment', async (_evt, text) => {
+  try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+    if (!isOnline) return { result: 'AI service is offline.', error: 'offline' };
+    const result = await analyzeSentiment(text);
+    return result;
+  } catch (err) {
+    return { result: 'Sentiment analysis failed.', error: err.message };
+  }
+});
+
+ipcMain.handle('mode:keywords', async (_evt, text) => {
+  try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+    if (!isOnline) return { result: 'AI service is offline.', error: 'offline' };
+    const result = await extractKeywords(text);
+    return { keywords: result };
+  } catch (err) {
+    return { keywords: [], error: err.message };
+  }
+});
+
+ipcMain.handle('mode:reply', async (_evt, context) => {
+  try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+    if (!isOnline) return { result: 'AI service is offline.', error: 'offline' };
+    const result = await generateReply(context);
+    return { result };
+  } catch (err) {
+    return { result: 'Reply generation failed.', error: err.message };
+  }
+});
+
+ipcMain.handle('mode:title', async (_evt, content) => {
+  try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+    if (!isOnline) return { result: 'AI service is offline.', error: 'offline' };
+    const result = await generateTitle(content);
+    return { result };
+  } catch (err) {
+    return { result: 'Title generation failed.', error: err.message };
+  }
+});
+
+ipcMain.handle('mode:meetingNotes', async (_evt, transcript) => {
+  try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+    if (!isOnline) return { result: 'AI service is offline.', error: 'offline' };
+    const result = await meetingNotes(transcript);
+    return { result };
+  } catch (err) {
+    return { result: 'Meeting notes generation failed.', error: err.message };
+  }
+});
+
+// Smart Detection
+ipcMain.handle('smart:detectContent', async (_evt, text) => {
+  try {
+    return detectContentType(text);
+  } catch (err) {
+    return { type: 'plain', confidence: 0 };
+  }
+});
+
+ipcMain.handle('smart:detectIntent', async (_evt, text) => {
+  try {
+    return detectIntent(text);
+  } catch (err) {
+    return { intent: 'none', confidence: 0 };
+  }
+});
+
+ipcMain.handle('smart:suggestedActions', async (_evt, text) => {
+  try {
+    return getSuggestedActions(text);
+  } catch (err) {
+    return [];
+  }
+});
+
+ipcMain.handle('smart:process', async (_evt, text) => {
+  try {
+    const config = require('../shared/config');
+    const provider = config.defaultProvider || 'ollama';
+    const isOnline = await getProviderStatus(provider);
+
+    if (!isOnline) {
+      return { result: 'AI service is offline.', error: 'offline' };
+    }
+
+    const result = await smartProcess(text, {
+      summarize,
+      explainCode,
+      fixGrammar,
+      analyzeSentiment,
+      extractKeywords,
+      generateReply,
+      generateTitle,
+      meetingNotes,
+      translate: (t, lang) => translate(t, lang),
+      qa: (ctx, q) => qa(ctx, q),
+    });
+
+    return { result };
+  } catch (err) {
+    return { result: 'Smart processing failed.', error: err.message };
+  }
+});
+
+// Context Learning - Save user preference
+ipcMain.handle('smart:savePreference', async (_evt, { contentType, mode }) => {
+  try {
+    saveUserPreference(contentType, mode);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('smart:getPreferences', async _evt => {
+  try {
+    return getUserPreferences();
+  } catch (err) {
+    return {};
   }
 });
 

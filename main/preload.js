@@ -21,6 +21,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 🧠 NEW — Q&A bridge
   qa: (text, question) => ipcRenderer.invoke('qa:ask', { text, question }),
 
+  // NEW — Mode functions
+  modeTranslate: (text, targetLanguage) =>
+    ipcRenderer.invoke('mode:translate', { text, targetLanguage }),
+  modeExplainCode: code => ipcRenderer.invoke('mode:explainCode', code),
+  modeFixGrammar: text => ipcRenderer.invoke('mode:fixGrammar', text),
+  modeSentiment: text => ipcRenderer.invoke('mode:sentiment', text),
+  modeKeywords: text => ipcRenderer.invoke('mode:keywords', text),
+  modeReply: context => ipcRenderer.invoke('mode:reply', context),
+  modeTitle: content => ipcRenderer.invoke('mode:title', content),
+  modeMeetingNotes: transcript => ipcRenderer.invoke('mode:meetingNotes', transcript),
+
+  // Smart Detection & Auto-Process
+  smartDetectContent: text => ipcRenderer.invoke('smart:detectContent', text),
+  smartDetectIntent: text => ipcRenderer.invoke('smart:detectIntent', text),
+  smartGetSuggestedActions: text => ipcRenderer.invoke('smart:suggestedActions', text),
+  smartProcess: text => ipcRenderer.invoke('smart:process', text),
+  smartSavePreference: (contentType, mode) =>
+    ipcRenderer.invoke('smart:savePreference', { contentType, mode }),
+  smartGetPreferences: () => ipcRenderer.invoke('smart:getPreferences'),
+
   // Features - Save Conversations
   saveConversation: (conversation, summary) =>
     ipcRenderer.invoke('features:saveConversation', { conversation, summary }),

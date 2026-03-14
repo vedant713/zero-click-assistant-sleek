@@ -72,13 +72,18 @@ const getHeaderStyles = theme => {
       transition: 'all 0.2s ease',
     }),
     menuBtn: theme => ({
-      background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 2,
+      background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
       border: 'none',
       borderRadius: 8,
       padding: '6px 10px',
       cursor: 'pointer',
-      fontSize: '1rem',
+      fontSize: '0.75rem',
+      fontWeight: 500,
       color: theme === 'dark' ? '#fff' : '#1a1a2e',
+      transition: 'all 0.2s ease',
     }),
     dropdown: {
       position: 'absolute',
@@ -198,6 +203,7 @@ export default function Header({
         {[
           { key: 'summarize', label: 'Summarize' },
           { key: 'qa', label: 'Ask' },
+          { key: 'smart', label: '✨ Smart' },
         ].map(m => (
           <button
             key={m.key}
@@ -210,7 +216,7 @@ export default function Header({
       </div>
       <div style={{ position: 'relative' }}>
         <button onClick={() => setShowMenu(!showMenu)} style={styles.menuBtn(theme)} title="Menu">
-          ⋮
+          <span style={{ marginRight: 4 }}>More</span> ⋮
         </button>
         {showMenu && (
           <motion.div
@@ -248,6 +254,32 @@ export default function Header({
                 <div
                   key={item.key}
                   onClick={() => handleToolClick(item.key)}
+                  style={styles.dropdownItem(theme)}
+                >
+                  <span>{item.icon}</span>
+                  <span>{item.label}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '4px 6px' }}>
+              <div style={styles.dropdownLabel(theme)}>AI Modes</div>
+              {[
+                { key: 'translate', icon: '🌐', label: 'Translate' },
+                { key: 'explainCode', icon: '💻', label: 'Explain Code' },
+                { key: 'fixGrammar', icon: '✏️', label: 'Fix Grammar' },
+                { key: 'sentiment', icon: '😊', label: 'Sentiment' },
+                { key: 'keywords', icon: '🔑', label: 'Keywords' },
+                { key: 'reply', icon: '💬', label: 'Quick Reply' },
+                { key: 'title', icon: '📝', label: 'Generate Title' },
+                { key: 'meetingNotes', icon: '📋', label: 'Meeting Notes' },
+                { key: 'smart', icon: '✨', label: 'Smart Mode' },
+              ].map(item => (
+                <div
+                  key={item.key}
+                  onClick={() => {
+                    setMode(item.key);
+                    setShowMenu(false);
+                  }}
                   style={styles.dropdownItem(theme)}
                 >
                   <span>{item.icon}</span>
